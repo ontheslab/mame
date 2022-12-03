@@ -5076,3 +5076,14 @@ if (BUSES["MTU130"]~=null) then
 	}
  end
 
+ ---------------------------------------------------
+--
+--@src/devices/bus/nabu/keyboard/nabu_kbd.h,BUSES["NABU_KEYBOARD"] = true
+---------------------------------------------------
+
+if (BUSES["NABU_KEYBOARD"]~=null) then
+	files {
+		MAME_DIR .. "src/devices/bus/nabu/keyboard/nabu_kbd.cpp",
+		MAME_DIR .. "src/devices/bus/nabu/keyboard/nabu_kbd.h",
+	}
+end

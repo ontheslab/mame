@@ -1,0 +1,75 @@
+// license:BSD-3-Clause
+// copyright-holders:Brian Johnson
+
+
+#ifndef MAME_NABU_NABUPC_H
+#define MAME_NABU_NABUPC_H
+
+#pragma once
+
+#include "bus/centronics/ctronics.h"
+#include "cpu/z80/z80.h"
+#include "sound/ay8910.h"
+#include "speaker.h"
+#include "video/tms9928a.h"
+#include "machine/ay31015.h"
+#include "machine/i8251.h"
+#include "machine/ram.h"
+
+
+class nabupc_state : public driver_device
+{
+public:
+	nabupc_state(const machine_config &mconfig, device_type type, const char *tag);
+
+	void nabupc(machine_config &config);
+
+	virtual void machine_start() override;
+	virtual void machine_reset() override;
+
+private:
+	void memory_map(address_map &map);
+	void io_map(address_map &map);
+
+	uint8_t read_mem(offs_t offset);
+
+	uint8_t psg_portb_r();
+	void psg_porta_w(uint8_t data);
+	void control_w(uint8_t data);
+	void centronics_busy_handler(uint8_t state);
+	void update_irq();
+
+	DECLARE_WRITE_LINE_MEMBER(rxrdy_w);
+	DECLARE_WRITE_LINE_MEMBER(vdp_int_w);
+	DECLARE_WRITE_LINE_MEMBER(hcca_dr_w);
+	DECLARE_WRITE_LINE_MEMBER(hcca_tbre_w);
+	DECLARE_WRITE_LINE_MEMBER(hcca_fe_w);
+	DECLARE_WRITE_LINE_MEMBER(hcca_oe_w);
+
+	IRQ_CALLBACK_MEMBER(int_ack_cb);
+
+	required_device<z80_device> m_maincpu;
+	required_device<tms9928a_device> m_tms9928a;
+	required_device<screen_device> m_screen;
+	required_device<ay8910_device> m_ay8910;
+	required_device<speaker_device> m_speaker;
+	required_device<i8251_device> m_kbduart;
+	required_device<ay31015_device> m_hccauart;
+	required_device<ram_device> m_ram;
+	required_device<centronics_device> m_centronics;
+	required_ioport m_bios_sel;
+
+	output_finder<4> m_leds;
+
+	uint16_t m_irq_in_prio;
+	uint8_t m_hcca_dr;
+	uint8_t m_hcca_tbre;
+	uint8_t m_vdpint;
+	uint8_t m_rxrdy;
+	uint8_t m_porta;
+	uint8_t m_portb;
+	uint8_t m_control;
+	uint16_t m_bios_size;
+};
+
+#endif
