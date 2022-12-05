@@ -5085,5 +5085,7 @@ if (BUSES["NABU_KEYBOARD"]~=null) then
 	files {
 		MAME_DIR .. "src/devices/bus/nabu/keyboard/nabu_kbd.cpp",
 		MAME_DIR .. "src/devices/bus/nabu/keyboard/nabu_kbd.h",
+		MAME_DIR .. "src/devices/bus/nabu/keyboard/hlekeyboard.cpp",
+		MAME_DIR .. "src/devices/bus/nabu/keyboard/hlekeyboard.h",
 	}
 end

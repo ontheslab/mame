@@ -6,6 +6,7 @@
 
 #include "nabupc.h"
 
+#include "bus/nabu/keyboard/hlekeyboard.h"
 #include "bus/nabu/keyboard/nabu_kbd.h"
 #include "bus/rs232/null_modem.h"
 #include "bus/rs232/pty.h"
@@ -30,6 +31,7 @@ static void hcca_devices(device_slot_interface &device)
 static void keyboard_devices(device_slot_interface &device)
 {
 	device.option_add("nabu", NABU_KBD);
+	device.option_add("nabu_hle", NABU_HLE_KEYBOARD);
 }
 
 /** @brief F9318 input lines */
@@ -210,6 +212,7 @@ void nabupc_state::nabupc(machine_config &config)
 
 	// HCCA
 	AY31015(config, m_hccauart);
+	m_hccauart->set_auto_rdav(true);
 	m_hccauart->write_dav_callback().set(FUNC(nabupc_state::hcca_dr_w));
 	m_hccauart->write_tbmt_callback().set(FUNC(nabupc_state::hcca_tbre_w));
 	m_hccauart->write_fe_callback().set(FUNC(nabupc_state::hcca_fe_w));
@@ -412,5 +415,5 @@ ROM_END
 
 /*   YEAR  NAME        PARENT    COMPAT MACHINE     INPUT     CLASS      INIT        COMPANY       FULLNAME */
 /* NABUPC */
-COMP(1984, nabupc,   0,        0,     nabupc,   nabupc,      nabupc_state, empty_init, "NABU", "NABU PC", MACHINE_NOT_WORKING)
+COMP(1984, nabupc,   0,        0,     nabupc,   nabupc,      nabupc_state, empty_init, "NABU", "NABU PC", 0)
 
