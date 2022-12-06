@@ -159,9 +159,14 @@ nabupc_state::nabupc_state(const machine_config &mconfig, device_type type, cons
 	, m_hccauart(*this, "hccauart")
 	, m_ram(*this, RAM_TAG)
 	, m_centronics(*this, "centronics")
+	, m_bus(*this, "bus")
 	, m_bios_sel(*this, "CONFIG")
 	, m_leds(*this, "led%u", 0U)
 	, m_irq_in_prio(0xFEFF)
+	, m_j9int(0)
+	, m_j10int(0)
+	, m_j11int(0)
+	, m_j12int(0)
 	, m_hcca_dr(0)
 	, m_hcca_tbre(0)
 	, m_vdpint(0)
@@ -235,11 +240,26 @@ void nabupc_state::nabupc(machine_config &config)
 	clock_device &pclk(CLOCK(config, "pclk", 10.738635_MHz_XTAL / 6));  // 1.79 Mhz Clock
 	pclk.signal_handler().set(m_hccauart, FUNC(ay31015_device::write_rcp));
 	pclk.signal_handler().append(m_hccauart, FUNC(ay31015_device::write_tcp));
+
+	// Bus
+	NABU_OPTION_BUS(config, m_bus, 10.738635_MHz_XTAL / 3);
+	m_bus->out_int_callback<0>().set(FUNC(nabupc_state::j9_int_w));
+	m_bus->out_int_callback<1>().set(FUNC(nabupc_state::j10_int_w));
+	m_bus->out_int_callback<2>().set(FUNC(nabupc_state::j11_int_w));
+	m_bus->out_int_callback<3>().set(FUNC(nabupc_state::j12_int_w));
+	NABU_OPTION_BUS_SLOT(config, "option1", m_bus, 0, bus::nabu::option_bus_devices, nullptr);
+	NABU_OPTION_BUS_SLOT(config, "option2", m_bus, 1, bus::nabu::option_bus_devices, nullptr);
+	NABU_OPTION_BUS_SLOT(config, "option3", m_bus, 2, bus::nabu::option_bus_devices, nullptr);
+	NABU_OPTION_BUS_SLOT(config, "option4", m_bus, 3, bus::nabu::option_bus_devices, nullptr);
 }
 
 void nabupc_state::machine_reset()
 {
 	m_irq_in_prio = 0xFEFF;
+	m_j9int = 0;
+	m_j10int = 0;
+	m_j11int = 0;
+	m_j12int = 0;
 	m_hcca_dr = 0;
 	m_hcca_tbre = 0;
 	m_vdpint = 0;
@@ -264,6 +284,10 @@ void nabupc_state::machine_start()
 	m_hccauart->write_swe(0);
 
 	save_item(NAME(m_irq_in_prio));
+	save_item(NAME(m_j9int));
+	save_item(NAME(m_j10int));
+	save_item(NAME(m_j11int));
+	save_item(NAME(m_j12int));
 	save_item(NAME(m_hcca_dr));
 	save_item(NAME(m_hcca_tbre));
 	save_item(NAME(m_vdpint));
@@ -335,6 +359,30 @@ WRITE_LINE_MEMBER(nabupc_state::rxrdy_w)
 	update_irq();
 }
 
+WRITE_LINE_MEMBER(nabupc_state::j9_int_w)
+{
+	m_j9int = !state;
+	update_irq();
+}
+
+WRITE_LINE_MEMBER(nabupc_state::j10_int_w)
+{
+	m_j10int = !state;
+	update_irq();
+}
+
+WRITE_LINE_MEMBER(nabupc_state::j11_int_w)
+{
+	m_j11int = !state;
+	update_irq();
+}
+
+WRITE_LINE_MEMBER(nabupc_state::j12_int_w)
+{
+	m_j12int = !state;
+	update_irq();
+}
+
 IRQ_CALLBACK_MEMBER(nabupc_state::int_ack_cb)
 {
 	uint32_t vector = (m_portb << 4) & 0xe0;
@@ -343,6 +391,30 @@ IRQ_CALLBACK_MEMBER(nabupc_state::int_ack_cb)
 
 void nabupc_state::update_irq()
 {
+	if ((m_porta & 0x01) && m_j12int) {
+		m_irq_in_prio &= ~PRIO_IN_I0;
+	} else {
+		m_irq_in_prio |= PRIO_IN_I0;
+	}
+
+	if ((m_porta & 0x02) && m_j11int) {
+		m_irq_in_prio &= ~PRIO_IN_I1;
+	} else {
+		m_irq_in_prio |= PRIO_IN_I1;
+	}
+
+	if ((m_porta & 0x04) && m_j10int) {
+		m_irq_in_prio &= ~PRIO_IN_I2;
+	} else {
+		m_irq_in_prio |= PRIO_IN_I2;
+	}
+
+	if ((m_porta & 0x08) && m_j9int) {
+		m_irq_in_prio &= ~PRIO_IN_I3;
+	} else {
+		m_irq_in_prio |= PRIO_IN_I3;
+	}
+
 	if ((m_porta & 0x10) && m_vdpint) {
 		m_irq_in_prio &= ~PRIO_IN_I4;
 	} else {
@@ -399,6 +471,10 @@ void nabupc_state::io_map(address_map &map)
 	map(0x90, 0x91).rw(m_kbduart, FUNC(i8251_device::read), FUNC(i8251_device::write));
 	map(0xa0, 0xa1).rw(m_tms9928a, FUNC(tms9928a_device::read), FUNC(tms9928a_device::write));
 	map(0xb0, 0xb0).w("prndata", FUNC(output_latch_device::write));
+	map(0xc0, 0xcf).rw(m_bus, FUNC(bus::nabu::option_bus_device::read<0>), FUNC(bus::nabu::option_bus_device::write<0>));
+	map(0xd0, 0xdf).rw(m_bus, FUNC(bus::nabu::option_bus_device::read<1>), FUNC(bus::nabu::option_bus_device::write<1>));
+	map(0xe0, 0xef).rw(m_bus, FUNC(bus::nabu::option_bus_device::read<2>), FUNC(bus::nabu::option_bus_device::write<2>));
+	map(0xf0, 0xff).rw(m_bus, FUNC(bus::nabu::option_bus_device::read<3>), FUNC(bus::nabu::option_bus_device::write<3>));
 }
 
 ROM_START( nabupc )

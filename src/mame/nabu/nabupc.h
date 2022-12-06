@@ -8,6 +8,7 @@
 #pragma once
 
 #include "bus/centronics/ctronics.h"
+#include "bus/nabu/option.h"
 #include "cpu/z80/z80.h"
 #include "sound/ay8910.h"
 #include "speaker.h"
@@ -46,6 +47,11 @@ private:
 	DECLARE_WRITE_LINE_MEMBER(hcca_fe_w);
 	DECLARE_WRITE_LINE_MEMBER(hcca_oe_w);
 
+	DECLARE_WRITE_LINE_MEMBER(j9_int_w);
+	DECLARE_WRITE_LINE_MEMBER(j10_int_w);
+	DECLARE_WRITE_LINE_MEMBER(j11_int_w);
+	DECLARE_WRITE_LINE_MEMBER(j12_int_w);
+
 	IRQ_CALLBACK_MEMBER(int_ack_cb);
 
 	required_device<z80_device> m_maincpu;
@@ -57,11 +63,16 @@ private:
 	required_device<ay31015_device> m_hccauart;
 	required_device<ram_device> m_ram;
 	required_device<centronics_device> m_centronics;
+	required_device<bus::nabu::option_bus_device> m_bus;
 	required_ioport m_bios_sel;
 
 	output_finder<4> m_leds;
 
 	uint16_t m_irq_in_prio;
+	uint8_t m_j9int;
+	uint8_t m_j10int;
+	uint8_t m_j11int;
+	uint8_t m_j12int;
 	uint8_t m_hcca_dr;
 	uint8_t m_hcca_tbre;
 	uint8_t m_vdpint;
