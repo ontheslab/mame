@@ -315,17 +315,17 @@ void nabupc_state::control_w(uint8_t data)
 
 void nabupc_state::centronics_busy_handler(uint8_t state)
 {
-	m_portb = (m_portb & ~(0x10)) | (state << 4);
+	BIT_SET(m_portb, 4, state);
 }
 
 WRITE_LINE_MEMBER(nabupc_state::hcca_fe_w)
 {
-	m_portb = (m_portb & ~(0x20)) | (state << 5);
+	BIT_SET(m_portb, 5, state);
 }
 
 WRITE_LINE_MEMBER(nabupc_state::hcca_oe_w)
 {
-	m_portb = (m_portb & ~(0x40)) | (state << 6);
+	BIT_SET(m_portb, 6, state);
 }
 
 WRITE_LINE_MEMBER(nabupc_state::hcca_dr_w)
