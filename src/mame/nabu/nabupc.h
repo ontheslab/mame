@@ -69,14 +69,7 @@ private:
 	output_finder<4> m_leds;
 
 	uint16_t m_irq_in_prio;
-	uint8_t m_j9int;
-	uint8_t m_j10int;
-	uint8_t m_j11int;
-	uint8_t m_j12int;
-	uint8_t m_hcca_dr;
-	uint8_t m_hcca_tbre;
-	uint8_t m_vdpint;
-	uint8_t m_rxrdy;
+	uint8_t m_int_lines;
 	uint8_t m_porta;
 	uint8_t m_portb;
 	uint8_t m_control;

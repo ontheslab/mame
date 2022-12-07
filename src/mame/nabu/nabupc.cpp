@@ -22,6 +22,20 @@ static INPUT_PORTS_START( nabupc )
 	PORT_CONFSETTING( 0x01, "8k BIOS" )
 INPUT_PORTS_END
 
+// Bit manipulation
+namespace {
+	template<typename T> constexpr T BIT_SHIFT(unsigned n, unsigned v)
+	{
+		return (T)v << n;
+	}
+
+	template<typename T> void BIT_SET(T& w , unsigned n, unsigned v)
+	{
+		T mask = ~BIT_SHIFT<T>(n, 1);
+		w = (w & mask) | BIT_SHIFT<T>(n, v);
+	}
+}
+
 static void hcca_devices(device_slot_interface &device)
 {
 	device.option_add("pty",           PSEUDO_TERMINAL);
@@ -162,15 +176,8 @@ nabupc_state::nabupc_state(const machine_config &mconfig, device_type type, cons
 	, m_bus(*this, "bus")
 	, m_bios_sel(*this, "CONFIG")
 	, m_leds(*this, "led%u", 0U)
-	, m_irq_in_prio(0xFEFF)
-	, m_j9int(0)
-	, m_j10int(0)
-	, m_j11int(0)
-	, m_j12int(0)
-	, m_hcca_dr(0)
-	, m_hcca_tbre(0)
-	, m_vdpint(0)
-	, m_rxrdy(0)
+	, m_irq_in_prio(0xFF)
+	, m_int_lines(0)
 	, m_porta(0)
 	, m_portb(0)
 	, m_control(0)
@@ -255,15 +262,8 @@ void nabupc_state::nabupc(machine_config &config)
 
 void nabupc_state::machine_reset()
 {
-	m_irq_in_prio = 0xFEFF;
-	m_j9int = 0;
-	m_j10int = 0;
-	m_j11int = 0;
-	m_j12int = 0;
-	m_hcca_dr = 0;
-	m_hcca_tbre = 0;
-	m_vdpint = 0;
-	m_rxrdy = 0;
+	m_irq_in_prio = 0xFF;
+	m_int_lines = 0;
 	m_porta = 0;
 	m_portb = 0;
 	m_control = 0;
@@ -284,14 +284,7 @@ void nabupc_state::machine_start()
 	m_hccauart->write_swe(0);
 
 	save_item(NAME(m_irq_in_prio));
-	save_item(NAME(m_j9int));
-	save_item(NAME(m_j10int));
-	save_item(NAME(m_j11int));
-	save_item(NAME(m_j12int));
-	save_item(NAME(m_hcca_dr));
-	save_item(NAME(m_hcca_tbre));
-	save_item(NAME(m_vdpint));
-	save_item(NAME(m_rxrdy));
+	save_item(NAME(m_int_lines));
 	save_item(NAME(m_porta));
 	save_item(NAME(m_portb));
 	save_item(NAME(m_control));
@@ -337,49 +330,49 @@ WRITE_LINE_MEMBER(nabupc_state::hcca_oe_w)
 
 WRITE_LINE_MEMBER(nabupc_state::hcca_dr_w)
 {
-	m_hcca_dr = state;
+	BIT_SET(m_int_lines, 7, state);
 	update_irq();
 }
 
 WRITE_LINE_MEMBER(nabupc_state::hcca_tbre_w)
 {
-	m_hcca_tbre = state;
-	update_irq();
-}
-
-WRITE_LINE_MEMBER(nabupc_state::vdp_int_w)
-{
-	m_vdpint = state;
+	BIT_SET(m_int_lines, 6, state);
 	update_irq();
 }
 
 WRITE_LINE_MEMBER(nabupc_state::rxrdy_w)
 {
-	m_rxrdy = state;
+	BIT_SET(m_int_lines, 5, state);
+	update_irq();
+}
+
+WRITE_LINE_MEMBER(nabupc_state::vdp_int_w)
+{
+	BIT_SET(m_int_lines, 4, state);
 	update_irq();
 }
 
 WRITE_LINE_MEMBER(nabupc_state::j9_int_w)
 {
-	m_j9int = !state;
+	BIT_SET(m_int_lines, 3, !state);
 	update_irq();
 }
 
 WRITE_LINE_MEMBER(nabupc_state::j10_int_w)
 {
-	m_j10int = !state;
+	BIT_SET(m_int_lines, 2, !state);
 	update_irq();
 }
 
 WRITE_LINE_MEMBER(nabupc_state::j11_int_w)
 {
-	m_j11int = !state;
+	BIT_SET(m_int_lines, 1, !state);
 	update_irq();
 }
 
 WRITE_LINE_MEMBER(nabupc_state::j12_int_w)
 {
-	m_j12int = !state;
+	BIT_SET(m_int_lines, 0, !state);
 	update_irq();
 }
 
@@ -391,53 +384,8 @@ IRQ_CALLBACK_MEMBER(nabupc_state::int_ack_cb)
 
 void nabupc_state::update_irq()
 {
-	if ((m_porta & 0x01) && m_j12int) {
-		m_irq_in_prio &= ~PRIO_IN_I0;
-	} else {
-		m_irq_in_prio |= PRIO_IN_I0;
-	}
-
-	if ((m_porta & 0x02) && m_j11int) {
-		m_irq_in_prio &= ~PRIO_IN_I1;
-	} else {
-		m_irq_in_prio |= PRIO_IN_I1;
-	}
-
-	if ((m_porta & 0x04) && m_j10int) {
-		m_irq_in_prio &= ~PRIO_IN_I2;
-	} else {
-		m_irq_in_prio |= PRIO_IN_I2;
-	}
-
-	if ((m_porta & 0x08) && m_j9int) {
-		m_irq_in_prio &= ~PRIO_IN_I3;
-	} else {
-		m_irq_in_prio |= PRIO_IN_I3;
-	}
-
-	if ((m_porta & 0x10) && m_vdpint) {
-		m_irq_in_prio &= ~PRIO_IN_I4;
-	} else {
-		m_irq_in_prio |= PRIO_IN_I4;
-	}
-
-	if ((m_porta & 0x20) && m_rxrdy) {
-		m_irq_in_prio &= ~PRIO_IN_I5;
-	} else {
-		m_irq_in_prio |= PRIO_IN_I5;
-	}
-
-	if ((m_porta & 0x40) && m_hcca_tbre) {
-		m_irq_in_prio &= ~PRIO_IN_I6;
-	} else {
-		m_irq_in_prio |= PRIO_IN_I6;
-	}
-
-	if ((m_porta & 0x80) && m_hcca_dr) {
-		m_irq_in_prio &= ~PRIO_IN_I7;
-	} else {
-		m_irq_in_prio |= PRIO_IN_I7;
-	}
+	uint8_t interrupts = ~(m_porta & m_int_lines);
+	m_irq_in_prio = (m_irq_in_prio & 0xff00) | interrupts;
 
 	m_portb &= 0xf0;
 	f9318_out_t out = f9318(static_cast<f9318_in_t>(m_irq_in_prio));
