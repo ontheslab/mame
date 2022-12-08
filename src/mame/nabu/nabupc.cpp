@@ -6,6 +6,7 @@
 
 #include "nabupc.h"
 
+#include "bus/nabu/adapter.h"
 #include "bus/nabu/keyboard/hlekeyboard.h"
 #include "bus/nabu/keyboard/nabu_kbd.h"
 #include "bus/rs232/null_modem.h"
@@ -40,6 +41,7 @@ static void hcca_devices(device_slot_interface &device)
 {
 	device.option_add("pty",           PSEUDO_TERMINAL);
 	device.option_add("null_modem",    NULL_MODEM);
+	device.option_add("hcca_adapter",  NABU_NETWORK_ADAPTER);
 }
 
 static void keyboard_devices(device_slot_interface &device)
