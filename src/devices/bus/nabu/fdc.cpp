@@ -56,7 +56,7 @@ void fdc_device::device_start()
 //-------------------------------------------------
 void fdc_device::device_reset()
 {
-	m_wd2797->set_floppy(m_floppies[0]->get_device());
+	m_wd2797->set_floppy(nullptr);
 	m_wd2797->dden_w(0);
 }
 
@@ -80,14 +80,23 @@ uint8_t fdc_device::read(offs_t offset)
 	return result;
 }
 
-void fdc_device::motor_w(uint8_t state)
+void fdc_device::ds_w(uint8_t data)
 {
+	m_wd2797->dden_w(BIT(data, 0));
+
+	floppy_image_device *floppy = nullptr;
+
+	if (BIT(data, 1)) floppy = m_floppies[0]->get_device();
+	if (BIT(data, 2)) floppy = m_floppies[1]->get_device();
+
+	m_wd2797->set_floppy(floppy);
+
 	for (auto& fdd : m_floppies)
 	{
 		floppy_image_device *floppy = fdd->get_device();
 		if (floppy)
 		{
-			floppy->mon_w(state);
+			floppy->mon_w((data & 6) ? 0 : 1);
 		}
 	}
 }
@@ -102,7 +111,7 @@ void fdc_device::write(offs_t offset, uint8_t data)
 		m_wd2797->write(offset, data);
 		break;
 	case 0x0f:
-		motor_w(!BIT(data, 1));
+		ds_w(data);
 	}
 }
 

@@ -40,7 +40,7 @@ protected:
 	// optional information overrides
 	virtual void device_add_mconfig(machine_config &config) override;
 private:
-	void motor_w(uint8_t state);
+	void ds_w(uint8_t data);
 
 	required_device<wd2797_device>              m_wd2797;
 	required_device_array<floppy_connector, 2>  m_floppies;
