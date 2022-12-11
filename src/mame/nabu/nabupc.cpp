@@ -380,7 +380,7 @@ WRITE_LINE_MEMBER(nabupc_state::j12_int_w)
 
 IRQ_CALLBACK_MEMBER(nabupc_state::int_ack_cb)
 {
-	uint32_t vector = (m_portb << 4) & 0xe0;
+	uint32_t vector = m_portb  & 0xe;
 	return vector;
 }
 
