@@ -2232,4 +2232,16 @@ if opt_tool(FORMATS, "FS_ISIS") then
 	}
 end
 
+--------------------------------------------------
+--
+--@src/lib/formats/nabupc_dsk.h,FORMATS["NABUPC_DSK"] = true
+--------------------------------------------------
+
+if opt_tool(FORMATS, "NABUPC_DSK") then
+	files {
+		MAME_DIR.. "src/lib/formats/nabupc_dsk.cpp",
+		MAME_DIR.. "src/lib/formats/nabupc_dsk.h",
+	}
+end
+
 end

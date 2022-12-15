@@ -42,6 +42,8 @@ protected:
 private:
 	void ds_w(uint8_t data);
 
+	static void floppy_formats(format_registration &fr);
+
 	required_device<wd2797_device>              m_wd2797;
 	required_device_array<floppy_connector, 2>  m_floppies;
 };
