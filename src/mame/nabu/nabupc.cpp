@@ -13,8 +13,11 @@
 #include "bus/rs232/pty.h"
 #include "bus/rs232/rs232.h"
 #include "machine/clock.h"
+#include "emuopts.h"
 
 #include "nabupc.lh"
+
+#define HCCA_TAG "hcca"
 
 static INPUT_PORTS_START( nabupc )
 	PORT_START("CONFIG")
@@ -22,6 +25,15 @@ static INPUT_PORTS_START( nabupc )
 	PORT_CONFSETTING( 0x02, "4k BIOS" )
 	PORT_CONFSETTING( 0x01, "8k BIOS" )
 INPUT_PORTS_END
+
+static DEVICE_INPUT_DEFAULTS_START ( hcca_rs232_defaults )
+	DEVICE_INPUT_DEFAULTS( "RS232_RXBAUD", 0xff, RS232_BAUD_111900 )
+	DEVICE_INPUT_DEFAULTS( "RS232_TXBAUD", 0xff, RS232_BAUD_111900 )
+	DEVICE_INPUT_DEFAULTS( "RS232_DATABITS", 0xff, RS232_DATABITS_8 )
+	DEVICE_INPUT_DEFAULTS( "RS232_PARITY", 0xff, RS232_PARITY_NONE )
+	DEVICE_INPUT_DEFAULTS( "RS232_STOPBITS", 0xff, RS232_STOPBITS_1 )
+	DEVICE_INPUT_DEFAULTS( "FLOW_CONTROL", 0x07, 0x00 ) // No flow control
+DEVICE_INPUT_DEFAULTS_END
 
 // Bit manipulation
 namespace {
@@ -221,7 +233,7 @@ void nabupc_state::nabupc(machine_config &config)
 	I8251(config, m_kbduart, 10.738635_MHz_XTAL / 6);
 	m_kbduart->rxrdy_handler().set(*this, FUNC(nabupc_state::rxrdy_w));
 
-	rs232_port_device &kbd(RS232_PORT(config, "kbd", keyboard_devices, "nabu"));
+	rs232_port_device &kbd(RS232_PORT(config, "kbd", keyboard_devices, "nabu_hle"));
 	kbd.rxd_handler().set(m_kbduart, FUNC(i8251_device::write_rxd));
 
 	// HCCA
@@ -231,10 +243,21 @@ void nabupc_state::nabupc(machine_config &config)
 	m_hccauart->write_tbmt_callback().set(FUNC(nabupc_state::hcca_tbre_w));
 	m_hccauart->write_fe_callback().set(FUNC(nabupc_state::hcca_fe_w));
 	m_hccauart->write_or_callback().set(FUNC(nabupc_state::hcca_oe_w));
-	m_hccauart->write_so_callback().set("hcca", FUNC(rs232_port_device::write_txd));
+	m_hccauart->write_so_callback().set(HCCA_TAG, FUNC(rs232_port_device::write_txd));
 
-	rs232_port_device &hcca(RS232_PORT(config, "hcca", hcca_devices, "pty"));
+	rs232_port_device &hcca(RS232_PORT(config, HCCA_TAG, hcca_devices, "null_modem"));
 	hcca.rxd_handler().set(m_hccauart, FUNC(ay31015_device::write_si));
+	hcca.set_option_device_input_defaults("null_modem", DEVICE_INPUT_DEFAULTS_NAME(hcca_rs232_defaults));
+
+	// Internet Adapter default socket if not set otherwise
+	if (config.options().has_image_option("bitbanger")) {
+		::image_option &bitb_imo(config.options().image_option("bitbanger"));
+		const std::string &bitb_val(bitb_imo.value());
+
+		if (bitb_val.empty()) {
+			bitb_imo.specify("socket.127.0.0.1:5816", false);
+		}
+	}
 
 	// Printer
 	output_latch_device &prndata(OUTPUT_LATCH(config, "prndata"));
@@ -429,6 +452,7 @@ void nabupc_state::io_map(address_map &map)
 
 ROM_START( nabupc )
 	ROM_REGION( 0x2000, "ipl", 0 )
+	ROM_DEFAULT_BIOS("reva")
 	ROM_SYSTEM_BIOS( 0, "reva", "4k BIOS" )
 	ROMX_LOAD( "nabupc-u53-90020060-reva-2732.bin", 0x0000, 0x1000, CRC(8110bde0) SHA1(57e5f34645df06d7cb6c202a6d35a442776af2cb), ROM_BIOS(0) )
 	ROM_SYSTEM_BIOS( 1, "ver14", "4k BIOS - Floppy support (V14)" )
