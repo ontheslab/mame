@@ -1193,7 +1193,8 @@ void mame_formats_full_list(mame_formats_enumerator &en)
 
 	en.category("NABU PC");
 #ifdef HAS_FORMATS_M20_DSK
-	en.add(FLOPPY_NABUPC_FORMAT); // nabupc_dsk.h
+	en.add(FLOPPY_NABUPC_CPM_FORMAT); // nabupc_dsk.h
+	en.add(FLOPPY_NABUPC_OSBORNE_FORMAT); // nabupc_dsk.h
 #endif
 
 	en.category("Nanos");

@@ -16,23 +16,8 @@
 #include "strformat.h"
 
 
-nabupc_format::nabupc_format()
+nabupc_format::nabupc_format(bool cpm) : m_cpmldr(cpm)
 {
-}
-
-const char *nabupc_format::name() const
-{
-	return "nabupc";
-}
-
-const char *nabupc_format::description() const
-{
-	return "NABU PC disk image";
-}
-
-const char *nabupc_format::extensions() const
-{
-	return "img";
 }
 
 bool nabupc_format::supports_save() const
@@ -43,20 +28,30 @@ bool nabupc_format::supports_save() const
 int nabupc_format::identify(util::random_read &io, uint32_t form_factor, const std::vector<uint32_t> &variants) const
 {
 	uint64_t size;
+	uint8_t  sign[7];
+	size_t   actual;
+	bool     cpm = false;
+
+	sign[6] = 0;
 	if (io.length(size))
 		return 0;
 
-	if (size == 204800)
-		return FIFID_SIZE;
+	if (size != 204800)
+		return 0;
 
-	return 0;
+	io.read_at(0x4d1, sign, 6, actual);
+	if (memcmp(sign, "CPMLDR", 6) == 0) {
+		cpm = true;
+	}
+
+	return FIFID_SIZE | (m_cpmldr == cpm ? FIFID_HINT : 0);
 }
 
-void nabupc_format::build_nabu_track_mfm(int track, int head, floppy_image *image, int cell_count, int sector_count, const desc_pc_sector *sects, int gap_3, int gap_1, int gap_2)
+void nabupc_format::build_nabu_track_mfm(int track, int head, floppy_image *image, int cell_count, int sector_count, const desc_pc_sector *sects, int gap_3, int gap_1, int gap_2, bool cpmldr)
 {
 	std::vector<uint32_t> track_data;
 
-	if (track == 0) {
+	if (cpmldr && track == 0) {
 		for(int i=0; i< 2; i++) raw_w(track_data, 16, 0x4489);
 		raw_w(track_data, 16, 0x1054);  // 4e
 		for(int i=0; i<11; i++) mfm_w(track_data, 8, 0x4e);
@@ -137,7 +132,7 @@ bool nabupc_format::load(util::random_read &io, uint32_t form_factor, const std:
 				sects[i].deleted = false;
 				sects[i].bad_crc = false;
 			}
-			build_nabu_track_mfm(track, 0, image, 100000, 5, sects, 80, 32, 22);
+			build_nabu_track_mfm(track, 0, image, 100000, 5, sects, 80, 32, 22, m_cpmldr);
 	}
 	return true;
 }
@@ -161,4 +156,43 @@ bool nabupc_format::save(util::random_read_write &io, const std::vector<uint32_t
 	return true;
 }
 
-const nabupc_format FLOPPY_NABUPC_FORMAT;
+nabupc_cpm_format::nabupc_cpm_format() : nabupc_format(true)
+{
+}
+
+const char *nabupc_cpm_format::name() const
+{
+	return "nabupc_cpm";
+}
+
+const char *nabupc_cpm_format::description() const
+{
+	return "NABU PC CPM Disk Image";
+}
+
+const char *nabupc_cpm_format::extensions() const
+{
+	return "img";
+}
+
+nabupc_osborne_format::nabupc_osborne_format() : nabupc_format(false)
+{
+}
+
+const char *nabupc_osborne_format::name() const
+{
+	return "nabupc_osborne";
+}
+
+const char *nabupc_osborne_format::description() const
+{
+	return "NABU PC Data Disk Image";
+}
+
+const char *nabupc_osborne_format::extensions() const
+{
+	return "img";
+}
+
+const nabupc_cpm_format FLOPPY_NABUPC_CPM_FORMAT;
+const nabupc_osborne_format FLOPPY_NABUPC_OSBORNE_FORMAT;

@@ -65,7 +65,8 @@ void fdc_device::device_reset()
 void fdc_device::floppy_formats(format_registration &fr)
 {
 	fr.add(FLOPPY_IMD_FORMAT);
-	fr.add(FLOPPY_NABUPC_FORMAT);
+	fr.add(FLOPPY_NABUPC_CPM_FORMAT);
+	fr.add(FLOPPY_NABUPC_OSBORNE_FORMAT);
 }
 
 void fdc_device::ds_w(uint8_t data)
