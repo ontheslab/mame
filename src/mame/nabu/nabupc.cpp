@@ -288,7 +288,7 @@ void nabupc_state::nabupc(machine_config &config)
 void nabupc_state::machine_reset()
 {
 	m_irq_in_prio = 0xFF;
-	m_int_lines = 0;
+	m_int_lines = 0x40;
 	m_porta = 0;
 	m_portb = 0;
 	m_control = 0;
