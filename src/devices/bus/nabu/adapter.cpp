@@ -33,7 +33,7 @@ std::error_condition segment_file::load(const char * local_path, uint32_t segmen
 	memset(current.data, 0, 991);
 	current.segment_id[0] = (segment_id & 0xFF0000) >> 16;
 	current.segment_id[1] = (segment_id & 0x00FF00) >> 8;
-	current.segment_id[2] = (segment_id & 0xF000FF);
+	current.segment_id[2] = (segment_id & 0x0000FF);
 	current.owner         = 0x01;
 	current.tier[0]       = 0x7f;
 	current.tier[1]       = 0xff;
@@ -113,7 +113,7 @@ nabu_network_adapter::nabu_network_adapter(machine_config const &mconfig, char c
 	, m_channel(0)
 	, m_packet(0)
 	, m_segment(0)
-	, m_state(State::START)
+	, m_state(State::IDLE)
 	, m_substate(0)
 	, m_segment_timer(nullptr)
 	{
@@ -141,7 +141,7 @@ void nabu_network_adapter::device_start()
 
 void nabu_network_adapter::device_reset()
 {
-	m_state = State::START;
+	m_state = State::IDLE;
 	m_substate = 0;
 	// initialise state
 	clear_fifo();
@@ -187,29 +187,6 @@ void nabu_network_adapter::tra_callback()
 	output_rxd(transmit_register_get_data_bit());
 }
 
-void nabu_network_adapter::connect(uint8_t byte, bool channel_request = true)
-{
-	if (byte == 0x83 && m_substate == 0) {
-		transmit_byte(0x10);
-		transmit_byte(0x06);
-		transmit_byte(0xE4);
-	} else if (byte == 0x82 && m_substate == 1) {
-		transmit_byte(0x10);
-		transmit_byte(0x06);
-	} else if (byte == 0x01 && m_substate == 2) {
-		transmit_byte(channel_request ? 0x9F : 0x1F);
-		transmit_byte(0x10);
-		transmit_byte(0xE1);
-		m_state = State::IDLE;
-	} else {
-		LOG("Unexpected byte: 0x%02X (%d), restarting Adapter.\n", byte, m_substate);
-		m_state = State::START;
-		m_substate = 0;
-		return;
-	}
-	++m_substate;
-}
-
 void nabu_network_adapter::idle(uint8_t byte)
 {
 	m_substate = 0;
@@ -227,6 +204,7 @@ void nabu_network_adapter::idle(uint8_t byte)
 	case 0x83:
 		transmit_byte(0x10);
 		transmit_byte(0x06);
+		transmit_byte(0xE4);
 		break;
 	case 0x82:
 		transmit_byte(0x10);
@@ -238,8 +216,9 @@ void nabu_network_adapter::idle(uint8_t byte)
 		m_state = State::HEX81_REQUEST;
 		break;
 	case 0x01:
+		transmit_byte(bool(m_config->read() & 1) ? 0x9F : 0x1F);
 		transmit_byte(0x10);
-		transmit_byte(0x06);
+		transmit_byte(0xE1);
 		break;
 	}
 
@@ -292,14 +271,14 @@ void nabu_network_adapter::send_segment(uint8_t byte)
 	if (m_substate == 0) {
 		if (byte != 0x10) {
 			LOG("Expecting byte 0x10 got %02X, restarting.\n", byte);
-			m_state = State::START;
+			m_state = State::IDLE;
 			m_substate = 0;
 			return;
 		}
 	} else if (m_substate == 1) {
 		if (byte != 0x06) {
 			LOG("Expecting byte 0x06 got %02X, restarting.\n", byte);
-			m_state = State::START;
+			m_state = State::IDLE;
 			m_substate = 0;
 			return;
 		}
@@ -323,9 +302,6 @@ void nabu_network_adapter::received_byte(uint8_t byte)
 {
 	LOG("Recieved Byte 0x%02X\n", byte);
 	switch(m_state) {
-	case State::START:
-		connect(byte, bool(m_config->read() & 1));
-		break;
 	case State::IDLE:
 		idle(byte);
 		break;

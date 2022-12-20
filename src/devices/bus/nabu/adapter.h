@@ -85,14 +85,13 @@ private:
 	static constexpr device_serial_interface::stop_bits_t STOP_BITS = device_serial_interface::STOP_BITS_1;
 	static constexpr int BAUD = 111'900;
 
-	enum State {START, IDLE, HEX81_REQUEST, CHANNEL_REQUEST, SEGMENT_REQUEST, SEND_SEGMENT};
+	enum State {IDLE, HEX81_REQUEST, CHANNEL_REQUEST, SEGMENT_REQUEST, SEND_SEGMENT};
 
 	TIMER_CALLBACK_MEMBER(segment_tick);
 
 	virtual void received_byte(uint8_t byte) override;
 
 	// State Machine
-	void connect(uint8_t byte, bool channel_request);
 	void idle(uint8_t byte);
 	void channel_request(uint8_t byte);
 	void segment_request(uint8_t byte);
