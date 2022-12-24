@@ -9,9 +9,6 @@
 #include "emu.h"
 #include "hdd.h"
 
-#define VERBOSE 1
-#include "logmacro.h"
-
 //**************************************************************************
 //  NABU PC FDC DEVICE
 //**************************************************************************
@@ -75,13 +72,11 @@ uint8_t hdd_device::read(offs_t offset)
 	default:
 		result = 0xFF;
 	}
-	LOG("HDD Read %02X @ %02X\n", result, offset);
 	return result;
 }
 
 void hdd_device::write(offs_t offset, uint8_t data)
 {
-	LOG("HDD Write %02X @ %02X\n", data, offset);
 	switch(offset) {
 	case 0x00:
 	case 0x01:
