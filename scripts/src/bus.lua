@@ -5083,6 +5083,8 @@ if (BUSES["MTU130"]~=null) then
 ---------------------------------------------------
 if (BUSES["NABU"]~=null) then
 	files {
+		MAME_DIR .. "src/devices/bus/nabu/rs232.cpp",
+		MAME_DIR .. "src/devices/bus/nabu/rs232.h",
 		MAME_DIR .. "src/devices/bus/nabu/adapter.cpp",
 		MAME_DIR .. "src/devices/bus/nabu/adapter.h",
 		MAME_DIR .. "src/devices/bus/nabu/fdc.cpp",

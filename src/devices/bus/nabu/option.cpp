@@ -11,6 +11,7 @@
 
 #include "fdc.h"
 #include "hdd.h"
+#include "rs232.h"
 
 DEFINE_DEVICE_TYPE(NABU_OPTION_BUS_SLOT, bus::nabu::option_slot_device, "nabu_option_slot", "NABU PC Option slot")
 DEFINE_DEVICE_TYPE(NABU_OPTION_BUS, bus::nabu::option_bus_device, "nabu_option_bus", "NABU PC Option Bus")
@@ -129,6 +130,7 @@ void option_bus_devices(device_slot_interface &device)
 {
 	device.option_add("fdc", NABU_OPTION_FDC);
 	device.option_add("hdd", NABU_OPTION_HDD);
+	device.option_add("rs232",  NABU_OPTION_RS232);
 }
 
 }  // namespace bus::nabu
