@@ -10,9 +10,11 @@
 #include "adapter.h"
 
 #include "emuopts.h"
+#include "hashing.h"
 #include "unzip.h"
+#include <gcrypt.h>
 
-#define VERBOSE 0
+#define VERBOSE 1
 #include "logmacro.h"
 
 
@@ -20,7 +22,8 @@
 //  NABU PC NETWORK ADAPTER DEVICE
 //**************************************************************************
 
-DEFINE_DEVICE_TYPE(NABU_NETWORK_ADAPTER, bus::nabu::network_adapter, "nabu_net_adapter", "NABU Network Adapter")
+DEFINE_DEVICE_TYPE(NABU_NETWORK_LOCAL_ADAPTER, bus::nabu::network_adapter_local, "nabu_net_local_adapter", "NABU Network Adapter - Local")
+DEFINE_DEVICE_TYPE(NABU_NETWORK_REMOTE_ADAPTER, bus::nabu::network_adapter_remote, "nabu_net_remote_adapter", "NABU Network Adapter - Remote")
 
 namespace bus::nabu {
 
@@ -28,46 +31,59 @@ namespace bus::nabu {
 //  SEGMENT FILE LOADING
 //**************************************************************************
 
-// Load segment file from disk
-std::error_condition network_adapter::segment_file::read_archive(util::core_file &stream, uint32_t segment_id)
+std::error_condition network_adapter_base::segment_file::generate_time_segment()
 {
-	segment_id &= 0xFFFFFF;
+	uint8_t buffer[9];
+	auto now = std::chrono::system_clock::now();
+	auto tim = std::chrono::system_clock::to_time_t(now);
+	auto localtime = std::localtime(&tim);
 
-	util::core_file::ptr proxy;
-	std::error_condition err = util::core_file::open_proxy(stream, proxy);
-	if (err)
-		return err;
-
-	util::archive_file::ptr zipfile;
-	err = util::archive_file::open_zip(std::move(proxy), zipfile);
-	if (err)
-		return err;
-
-	std::string segment_filename = util::string_format("%06d.nabu", segment_id);
-
-	if (zipfile->search(segment_filename, false) < 0)
-		return std::errc::no_such_file_or_directory;
-
-	// determine the uncompressed length
-	uint64_t uncompressed_length_uint64 = zipfile->current_uncompressed_length();
-	size_t uncompressed_length = (size_t)uncompressed_length_uint64;
-	if (uncompressed_length != uncompressed_length_uint64)
-		return std::errc::not_enough_memory;
-
-	// prepare a buffer for the segment file
-	std::unique_ptr<char[]> segment_buffer(new (std::nothrow) char[uncompressed_length]);
-	if (!segment_buffer)
-		return std::errc::not_enough_memory;
-
-	err = zipfile->decompress(&segment_buffer[0], uncompressed_length);
-	if (err)
-		return err;
-
-	m_segment_id = segment_id;
-	return parse_segment(&segment_buffer[0], uncompressed_length);
+	buffer[0] = 0x02;
+	buffer[1] = 0x02;
+	buffer[2] = 0x02;
+	buffer[3] = 0x54;   // 1984 forever
+	buffer[4] = localtime->tm_mon + 1;
+	buffer[5] = localtime->tm_mday;
+	buffer[6] = localtime->tm_hour;
+	buffer[7] = localtime->tm_min;
+	buffer[8] = localtime->tm_sec;
+	return parse_raw_segment(0x7fffff, buffer, 9);
 }
 
-std::error_condition network_adapter::segment_file::parse_segment(char *data, size_t length)
+
+std::error_condition network_adapter_base::segment_file::parse_pak_segment(const uint8_t *data, size_t length)
+{
+	bool done = false;
+	size_t offset = 0;
+	uint16_t blk_sz;
+	uint16_t crc;
+	pak current;
+
+	pak_list.clear();
+
+	while (!done) {
+		blk_sz =  (data[offset + 1] & 0xff) << 8;
+		blk_sz |= (data[offset] & 0xff);
+		crc = 0xffff;
+		if (blk_sz > 1009) {
+			return std::errc::value_too_large;
+		}
+		memcpy(&current, data + offset, 2 + blk_sz);
+		for (int i = 2; i < blk_sz; ++i) {
+			crc = update_crc(crc, ((char *)&current)[i]);
+		}
+		crc ^= 0xffff;
+		current.data[blk_sz - 18] = (crc >> 8) & 0xFF;
+		current.data[blk_sz - 17] = crc & 0xFF;
+		pak_list.push_back(current);
+		offset += blk_sz + 2;
+		if (offset >= length - 1 || current.type & 0x10)
+			done = true;
+	}
+	return std::error_condition();
+}
+
+std::error_condition network_adapter_base::segment_file::parse_raw_segment(uint32_t segment_id, const uint8_t *data, size_t length)
 {
 	util::core_file::ptr fd;
 	pak current;
@@ -78,14 +94,15 @@ std::error_condition network_adapter::segment_file::parse_segment(char *data, si
 	std::error_condition err;
 
 	pak_list.clear();
+
 	err = util::core_file::open_ram(data, length, OPEN_FLAG_READ, fd);
 	if (err)
 		return err;
 
 	memset(current.data, 0, 991);
-	current.segment_id[0] = (m_segment_id & 0xFF0000) >> 16;
-	current.segment_id[1] = (m_segment_id & 0x00FF00) >> 8;
-	current.segment_id[2] = (m_segment_id & 0xF000FF);
+	current.segment_id[0] = (segment_id & 0xFF0000) >> 16;
+	current.segment_id[1] = (segment_id & 0x00FF00) >> 8;
+	current.segment_id[2] = (segment_id & 0xF000FF);
 	current.owner         = 0x01;
 	current.tier[0]       = 0x7f;
 	current.tier[1]       = 0xff;
@@ -100,6 +117,7 @@ std::error_condition network_adapter::segment_file::parse_segment(char *data, si
 			return err;
 		}
 		if (actual > 0) {
+			current.length = actual + 18;
 			current.packet_number = npak;
 			current.pak_number[0] = npak;
 			current.pak_number[1] = 0;
@@ -110,12 +128,12 @@ std::error_condition network_adapter::segment_file::parse_segment(char *data, si
 				current.type |= 0x10;
 			current.offset[0] = ((offset) >> 8) & 0xFF;
 			current.offset[1] = offset & 0xFF;
-			for (int i = 0; i < 1007; ++i) {
+			for (int i = 2; i < actual + 18; ++i) {
 				crc = update_crc(crc, ((char *)&current)[i]);
 			}
 			crc ^= 0xffff;
-			current.crc[0] = (crc >> 8) & 0xFF;
-			current.crc[1] = crc & 0xFF;
+			current.data[actual] = (crc >> 8) & 0xFF;
+			current.data[actual + 1] = crc & 0xFF;
 			pak_list.push_back(current);
 			offset = (++npak * 991);
 			memset(current.data, 0, 991);
@@ -126,7 +144,7 @@ std::error_condition network_adapter::segment_file::parse_segment(char *data, si
 	return err;
 }
 
-const network_adapter::segment_file::pak& network_adapter::segment_file::operator[](const int index) const
+const network_adapter_base::segment_file::pak& network_adapter_base::segment_file::operator[](const int index) const
 {
 	assert(index >= 0 && index < size());
 
@@ -134,7 +152,7 @@ const network_adapter::segment_file::pak& network_adapter::segment_file::operato
 }
 
 // crc16 calculation
-uint16_t network_adapter::segment_file::update_crc(uint16_t crc, uint8_t data)
+uint16_t network_adapter_base::segment_file::update_crc(uint16_t crc, uint8_t data)
 {
 	uint8_t bc;
 
@@ -151,7 +169,7 @@ uint16_t network_adapter::segment_file::update_crc(uint16_t crc, uint8_t data)
 //**************************************************************************
 
 // CONFIG
-static INPUT_PORTS_START( nabu_network_adapter )
+static INPUT_PORTS_START( nabu_network_adapter_base )
 	PORT_START("CONFIG")
 	PORT_CONFNAME(0x01, 0x00, "Prompt for channel?")
 	PORT_CONFSETTING(0x01, "Yes")
@@ -159,38 +177,44 @@ static INPUT_PORTS_START( nabu_network_adapter )
 INPUT_PORTS_END
 
 //**************************************************************************
-//  DEVICE INITIALIZATION
+//  DEVICE INITIALIZATION - Base
 //**************************************************************************
 
-network_adapter::network_adapter(machine_config const &mconfig, char const *tag, device_t *owner, uint32_t clock)
-	: device_t(mconfig, NABU_NETWORK_ADAPTER, tag, owner, clock)
+network_adapter_base::network_adapter_base(machine_config const &mconfig, device_type type, char const *tag, device_t *owner, uint32_t clock)
+	: device_t(mconfig, type, tag, owner, clock)
 	, device_buffered_serial_interface(mconfig, *this)
 	, device_rs232_port_interface(mconfig, *this)
-	, device_image_interface(mconfig, *this)
-	, m_config(*this, "CONFIG")
+	, m_segment(0)
+	, m_segment_length(0)
+	, m_segment_type(segment_type::PAK)
 	, m_channel(0)
 	, m_packet(0)
-	, m_segment(0)
 	, m_state(state::IDLE)
 	, m_substate(0)
+	, m_pak_offset(0)
+	, m_config(*this, "CONFIG")
 	, m_segment_timer(nullptr)
 {
 }
 
-void network_adapter::device_start()
+void network_adapter_base::device_start()
 {
-	m_segment_timer = timer_alloc(FUNC(network_adapter::segment_tick), this);
+	m_segment_timer = timer_alloc(FUNC(network_adapter_base::segment_tick), this);
 
-	machine().save().register_postload(save_prepost_delegate(FUNC(network_adapter::postload), this));
+	m_segment_data = std::make_unique<uint8_t[]>(0x10000);;
 
 	save_item(NAME(m_state));
 	save_item(NAME(m_substate));
 	save_item(NAME(m_channel));
 	save_item(NAME(m_packet));
 	save_item(NAME(m_segment));
+	save_item(NAME(m_segment_length));
+	save_item(NAME(m_segment_type));
+	save_item(NAME(m_pak_offset));
+	save_pointer(NAME(m_segment_data), 0x10000);
 }
 
-void network_adapter::device_reset()
+void network_adapter_base::device_reset()
 {
 	m_state = state::IDLE;
 	m_substate = 0;
@@ -204,54 +228,30 @@ void network_adapter::device_reset()
 	transmit_register_reset();
 }
 
-void network_adapter::postload()
-{
-	if (is_loaded()) {
-		m_cache.read_archive(image_core_file(), m_segment);
-	}
-}
+//**************************************************************************
+//  DEVICE CONFIGURATION - Base
+//**************************************************************************
 
-image_init_result network_adapter::call_load()
+ioport_constructor network_adapter_base::device_input_ports() const
 {
-	if (is_filetype("pak")) {
-/*
-		std::error_condition err = m_cache.read_archive(image_core_file(), 1);
-		if (!err) {
-			printf("Segment Opened: %s size: %d\n", "000001.nabu", m_cache.size());
-		} else {
-			printf("Segment Opened Failed: %d\n", err.value());
-		}
-		*/
-		return image_init_result::PASS;
-	}
-	seterror(image_error::INVALIDIMAGE);
-	return image_init_result::FAIL;
+	return INPUT_PORTS_NAME( nabu_network_adapter_base );
 }
 
 //**************************************************************************
-//  DEVICE CONFIGURATION
+//  SERIAL PROTOCOL - Base
 //**************************************************************************
 
-ioport_constructor network_adapter::device_input_ports() const
-{
-	return INPUT_PORTS_NAME( nabu_network_adapter );
-}
-
-//**************************************************************************
-//  SERIAL PROTOCOL
-//**************************************************************************
-
-WRITE_LINE_MEMBER(network_adapter::input_txd)
+WRITE_LINE_MEMBER(network_adapter_base::input_txd)
 {
 	device_buffered_serial_interface::rx_w(state);
 }
 
-void network_adapter::tra_callback()
+void network_adapter_base::tra_callback()
 {
 	output_rxd(transmit_register_get_data_bit());
 }
 
-void network_adapter::received_byte(uint8_t byte)
+void network_adapter_base::received_byte(uint8_t byte)
 {
 	LOG("Received Byte 0x%02X\n", byte);
 	switch (m_state) {
@@ -274,10 +274,10 @@ void network_adapter::received_byte(uint8_t byte)
 }
 
 //**************************************************************************
-//  STATE MACHINE
+//  STATE MACHINE - Base
 //**************************************************************************
 
-void network_adapter::idle(uint8_t byte)
+void network_adapter_base::idle(uint8_t byte)
 {
 	m_substate = 0;
 	switch (byte) {
@@ -310,11 +310,15 @@ void network_adapter::idle(uint8_t byte)
 		transmit_byte(0x10);
 		transmit_byte(0xE1);
 		break;
+	case 0x1E:
+		transmit_byte(0x10);
+		transmit_byte(0xE1);
+		break;
 	}
 
 }
 
-void network_adapter::hex81_request(uint8_t byte)
+void network_adapter_base::hex81_request(uint8_t byte)
 {
 	if (m_substate == 1) {
 		transmit_byte(0xE4);
@@ -324,7 +328,7 @@ void network_adapter::hex81_request(uint8_t byte)
 
 }
 
-void network_adapter::channel_request(uint8_t byte)
+void network_adapter_base::channel_request(uint8_t byte)
 {
 	if (m_substate == 0) {
 		m_channel = (m_channel & 0xFF00) | (byte);
@@ -337,27 +341,37 @@ void network_adapter::channel_request(uint8_t byte)
 	++m_substate;
 }
 
-void network_adapter::segment_request(uint8_t byte)
+void network_adapter_base::segment_request(uint8_t byte)
 {
+	static uint32_t segment_id = 0;
+
 	if (m_substate == 0) {
 		m_packet = byte;
 	} else if (m_substate == 1) {
-		m_segment = (m_segment & 0xFFFF00) | (byte);
+		segment_id = (segment_id & 0xFFFF00) | (byte);
 	} else if (m_substate == 2) {
-		m_segment = (m_segment & 0xFF00FF) | (byte << 8);
+		segment_id = (segment_id & 0xFF00FF) | (byte << 8);
 	} else if (m_substate == 3) {
-		m_segment = (m_segment & 0xFFFF) | (byte << 16);
+		segment_id = (segment_id & 0xFFFF) | (byte << 16);
 		transmit_byte(0xE4);
-		transmit_byte(0x91);
-		m_state = state::SEND_SEGMENT;
-		m_substate = 0;
-		LOG("Segment: 0x%06X, Packet: 0x%02X\n", m_segment, m_packet);
-		return;
+		if (!load_segment(segment_id)) {
+			transmit_byte(0x91);
+			m_state = state::SEND_SEGMENT;
+			m_substate = 0;
+			m_segment = segment_id;
+			LOG("Segment: 0x%06X, Packet: 0x%02X\n", m_segment, m_packet);
+			return;
+		} else {
+			transmit_byte(0x90);
+			m_state = state::IDLE;
+			LOG("Segment 0x%06X not found\n", segment_id);
+			m_segment = 0;
+		}
 	}
 	++m_substate;
 }
 
-void network_adapter::send_segment(uint8_t byte)
+void network_adapter_base::send_segment(uint8_t byte)
 {
 	if (m_substate == 0) {
 		if (byte != 0x10) {
@@ -374,8 +388,8 @@ void network_adapter::send_segment(uint8_t byte)
 			return;
 		}
 		m_pak_offset = 0;
-		if (is_loaded() && !m_cache.read_archive(image_core_file(), m_segment)) {
-			m_segment_timer->adjust(attotime::zero, 0, attotime::from_hz(1'000));
+		if (!parse_segment(m_segment_data.get(), m_segment_length)) {
+			m_segment_timer->adjust(attotime::zero, 0, attotime::from_hz(7'500));
 			LOG("Segment sending, returning to idle state\n");
 		} else {
 			LOG("Failed to find segment: %06d, restarting\n", m_segment);
@@ -389,18 +403,130 @@ void network_adapter::send_segment(uint8_t byte)
 	++m_substate;
 }
 
-TIMER_CALLBACK_MEMBER(network_adapter::segment_tick)
+TIMER_CALLBACK_MEMBER(network_adapter_base::segment_tick)
 {
-		char * data = (char*)&m_cache[m_packet];
+		char * data = (char*)&m_pakcache[m_packet];
+		data += 2;
 		if (data[m_pak_offset] == 0x10) {
 			transmit_byte(data[m_pak_offset]);
 		}
 		transmit_byte(data[m_pak_offset++]);
-		if (m_pak_offset >= sizeof(segment_file::pak)) {
+		if (m_pak_offset >= m_pakcache[m_packet].length) {
 			transmit_byte(0x10);
 			transmit_byte(0xe1);
 			m_segment_timer->reset();
 		}
+}
+
+std::error_condition network_adapter_base::parse_segment(const uint8_t *data, size_t length)
+{
+	if (m_segment == 0x7fffff) {
+		return m_pakcache.generate_time_segment();
+	}
+
+	if (m_segment_type == segment_type::NABU) {
+		return m_pakcache.parse_raw_segment(m_segment, data, length);
+	}
+
+	return m_pakcache.parse_pak_segment(data, length);
+}
+
+
+//**************************************************************************
+//  DEVICE INITIALIZATION - Local
+//**************************************************************************
+
+network_adapter_local::network_adapter_local(machine_config const &mconfig, char const *tag, device_t *owner, uint32_t clock)
+	: network_adapter_base(mconfig, NABU_NETWORK_LOCAL_ADAPTER, tag, owner, clock)
+	, device_image_interface(mconfig, *this)
+{
+}
+
+image_init_result network_adapter_local::call_load()
+{
+	if (is_filetype("npz")) {
+		return image_init_result::PASS;
+	}
+	seterror(image_error::INVALIDIMAGE);
+	return image_init_result::FAIL;
+}
+
+// Load Segment from local npz file
+std::error_condition network_adapter_local::load_segment(uint32_t segment_id)
+{
+	segment_id &= 0xFFFFFF;
+
+	util::core_file::ptr proxy;
+	std::error_condition err;
+	util::archive_file::ptr zipfile;
+	std::string segment_filename;
+
+	if ((m_segment_length != 0 && (segment_id == m_segment)) || segment_id == 0x7fffff) {
+		return std::error_condition();
+	}
+
+	err = util::core_file::open_proxy(image_core_file(), proxy);
+	if (err) {
+		m_segment_length = 0;
+		return err;
+	}
+
+	err = util::archive_file::open_zip(std::move(proxy), zipfile);
+	if (err) {
+		m_segment_length = 0;
+		return err;
+	}
+
+	segment_filename = util::string_format("%06X.pak", segment_id);
+	m_segment_type = segment_type::PAK;
+
+	if (zipfile->search(segment_filename, false) < 0) {
+		segment_filename = util::string_format("%06X.nabu", segment_id);
+		m_segment_type = segment_type::NABU;
+		if (zipfile->search(segment_filename, false) < 0) {
+			m_segment_length = 0;
+			return std::errc::no_such_file_or_directory;
+		}
+	}
+
+	// determine the uncompressed length
+	uint64_t uncompressed_length_uint64 = zipfile->current_uncompressed_length();
+	size_t uncompressed_length = (size_t)uncompressed_length_uint64;
+	if (uncompressed_length != uncompressed_length_uint64) {
+		m_segment_length = 0;
+		return std::errc::not_enough_memory;
+	}
+
+	if (uncompressed_length > 0x10000) {
+		m_segment_length = 0;
+		return std::errc::not_enough_memory;
+	}
+
+	// prepare a buffer for the segment file
+	m_segment_length = uncompressed_length;;
+
+	err = zipfile->decompress(&m_segment_data[0], m_segment_length);
+	if (err) {
+		m_segment_length = 0;
+	}
+
+	return err;
+}
+
+
+//**************************************************************************
+//  DEVICE INITIALIZATION - Remote
+//**************************************************************************
+
+network_adapter_remote::network_adapter_remote(machine_config const &mconfig, char const *tag, device_t *owner, uint32_t clock)
+	: network_adapter_base(mconfig, NABU_NETWORK_REMOTE_ADAPTER, tag, owner, clock)
+{
+}
+
+// Load segment from Remote Server (cloud.nabu.ca)
+std::error_condition network_adapter_remote::load_segment(uint32_t segment_id)
+{
+	return std::error_condition();
 }
 
 } // bus::nabupc

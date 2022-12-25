@@ -13,42 +13,26 @@
 
 #include "bus/rs232/rs232.h"
 #include "diserial.h"
+#include "client_http.hpp"
 
 namespace bus::nabu {
-
-
 
 //**************************************************************************
 //  TYPE DEFINITIONS
 //**************************************************************************
 
-/* NABU PC Network Adapter */
-
-class network_adapter
+/* NABU PC Network Adapter Base */
+class network_adapter_base
 	: public device_t
 	, public device_buffered_serial_interface<16U>
 	, public device_rs232_port_interface
-	, public device_image_interface
 {
 public:
-	// constructor/destructor
-	network_adapter(machine_config const &mconfig, char const *tag, device_t *owner, u32 clock);
-
-	// image-level overrides
-	virtual bool is_readable()  const noexcept override { return true; }
-	virtual bool is_writeable() const noexcept override { return false; }
-	virtual bool is_creatable() const noexcept override { return false; }
-	virtual bool is_reset_on_load() const noexcept override { return false; }
-	virtual bool core_opens_image_file() const noexcept override { return true; }
-	virtual const char *file_extensions() const noexcept override { return "pak"; }
-	virtual const char *image_type_name() const noexcept override { return "Segment Pak"; }
-	virtual const char *image_brief_type_name() const noexcept override { return "hcca"; }
-	virtual image_init_result call_load() override;
-
-
 	virtual DECLARE_WRITE_LINE_MEMBER(input_txd) override;
+
 protected:
-	// device overrides
+	// constructor/destructor
+	network_adapter_base(machine_config const &mconfig, device_type type, char const *tag, device_t *owner, u32 clock);
 	virtual ioport_constructor device_input_ports() const override;
 	virtual void device_start() override;
 	virtual void device_reset() override;
@@ -56,22 +40,13 @@ protected:
 	// device_buffered_serial_interface overrides
 	virtual void tra_callback() override;
 
-private:
-	// Serial Parameters
-	static constexpr int START_BIT_COUNT = 1;
-	static constexpr int DATA_BIT_COUNT = 8;
-	static constexpr device_serial_interface::parity_t PARITY = device_serial_interface::PARITY_NONE;
-	static constexpr device_serial_interface::stop_bits_t STOP_BITS = device_serial_interface::STOP_BITS_1;
-	static constexpr int BAUD = 111'900;
+	virtual std::error_condition load_segment(uint32_t segment_id) = 0;
 
-	virtual void received_byte(uint8_t byte) override;
-
-	void postload();
-
-	//  NABU Network Segment File
+	// class to handle splitting up segments
 	class segment_file {
 	public:
 		struct pak {
+			uint16_t length;
 			uint8_t segment_id[3];
 			uint8_t packet_number;
 			uint8_t owner;
@@ -80,13 +55,16 @@ private:
 			uint8_t type;
 			uint8_t pak_number[2];
 			uint8_t offset[2];
-			uint8_t data[991];
-			uint8_t crc[2];
+			uint8_t data[993]; //data + crc16 (data max size is 991)
 		};
 	public:
-		std::error_condition read_archive(util::core_file &stream, uint32_t segment_id);
+		std::error_condition generate_time_segment();
+		std::error_condition parse_pak_segment(const uint8_t *data, size_t length);
+		std::error_condition parse_raw_segment(uint32_t segment_id, const uint8_t *data, size_t length);
+
 		const pak& operator[](const int index) const;
 		uint32_t size() { return pak_list.size(); }
+
 	private:
 		static constexpr uint16_t crc_table[256] = {
 			0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7, 0x8108, 0x9129, 0xa14a, 0xb16b,
@@ -112,40 +90,94 @@ private:
 			0xef1f, 0xff3e, 0xcf5d, 0xdf7c, 0xaf9b, 0xbfba, 0x8fd9, 0x9ff8, 0x6e17, 0x7e36, 0x4e55, 0x5e74,
 			0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
 		};
-		std::error_condition parse_segment(char * buffer, size_t length);
 		uint16_t update_crc(uint16_t crc, uint8_t data);
 
-		uint32_t m_segment_id;
 		std::vector<pak> pak_list;
 	};
+
+	enum segment_type {PAK, NABU};
+
+
+	uint32_t m_segment;
+	size_t m_segment_length;
+	uint8_t m_segment_type;
+	std::unique_ptr<uint8_t[]> m_segment_data;
+
+	segment_file m_pakcache;
+
+private:
+	// Serial Parameters
+	static constexpr int START_BIT_COUNT = 1;
+	static constexpr int DATA_BIT_COUNT = 8;
+	static constexpr device_serial_interface::parity_t PARITY = device_serial_interface::PARITY_NONE;
+	static constexpr device_serial_interface::stop_bits_t STOP_BITS = device_serial_interface::STOP_BITS_1;
+	static constexpr int BAUD = 111'900;
+
+	virtual void received_byte(uint8_t byte) override;
 
 	// State Machine
 	enum state {IDLE, HEX81_REQUEST, CHANNEL_REQUEST, SEGMENT_REQUEST, SEND_SEGMENT};
 
 	TIMER_CALLBACK_MEMBER(segment_tick);
 
+	std::error_condition parse_segment(const uint8_t *data, size_t length);
+
 	void idle(uint8_t byte);
 	void channel_request(uint8_t byte);
 	void segment_request(uint8_t byte);
 	void hex81_request(uint8_t byte);
 	void send_segment(uint8_t byte);
-	void load_segment(std::string filename);
 
-	required_ioport m_config;
 
 	uint16_t m_channel;
 	uint8_t  m_packet;
-	uint32_t m_segment;
 	uint8_t  m_state;
 	uint8_t  m_substate;
 	uint16_t m_pak_offset;
 
+	required_ioport m_config;
+
 	emu_timer *m_segment_timer;
-	segment_file m_cache;
+
+};
+
+/* NABU PC Network Adapter Local */
+class network_adapter_local
+	: public network_adapter_base
+	, public device_image_interface
+{
+public:
+	// constructor/destructor
+	network_adapter_local(machine_config const &mconfig, char const *tag, device_t *owner, u32 clock);
+
+	// image-level overrides
+	virtual bool is_readable()  const noexcept override { return true; }
+	virtual bool is_writeable() const noexcept override { return false; }
+	virtual bool is_creatable() const noexcept override { return false; }
+	virtual bool is_reset_on_load() const noexcept override { return false; }
+	virtual bool core_opens_image_file() const noexcept override { return true; }
+	virtual const char *file_extensions() const noexcept override { return "npz"; }
+	virtual const char *image_type_name() const noexcept override { return "npz_file"; }
+	virtual const char *image_brief_type_name() const noexcept override { return "npz"; }
+	virtual image_init_result call_load() override;
+protected:
+	virtual std::error_condition load_segment(uint32_t segment_id) override;
+};
+
+/* NABU PC Network Adapter Remote */
+class network_adapter_remote
+	: public network_adapter_base
+{
+public:
+	// constructor/destructor
+	network_adapter_remote(machine_config const &mconfig, char const *tag, device_t *owner, u32 clock);
+protected:
+	virtual std::error_condition load_segment(uint32_t segment_id) override;
 };
 
 } // bus::nabu
 
-DECLARE_DEVICE_TYPE_NS(NABU_NETWORK_ADAPTER, bus::nabu, network_adapter)
+DECLARE_DEVICE_TYPE_NS(NABU_NETWORK_LOCAL_ADAPTER, bus::nabu, network_adapter_local)
+DECLARE_DEVICE_TYPE_NS(NABU_NETWORK_REMOTE_ADAPTER, bus::nabu, network_adapter_remote)
 
 #endif // MAME_BUS_NABU_ADAPTER_H
