@@ -126,68 +126,6 @@ std::error_condition network_adapter::segment_file::parse_segment(char *data, si
 	return err;
 }
 
-std::error_condition network_adapter::segment_file::load(std::string_view local_path, uint32_t segment_id)
-{
-	segment_id &= 0xFFFFFF;
-
-	osd_file::ptr fd;
-	pak current;
-	uint64_t segment_size;
-	uint64_t offset = 0;
-	uint32_t actual;
-	uint16_t crc;
-	uint8_t npak = 0;
-	std::error_condition err;
-	std::string filename = util::string_format("%s/nabu_network/%06d.nabu", osd_subst_env(local_path), segment_id);
-	pak_list.clear();
-	err = osd_file::open(filename, OPEN_FLAG_READ, fd, segment_size);
-	if (err)
-		return err;
-
-	memset(current.data, 0, 991);
-	current.segment_id[0] = (segment_id & 0xFF0000) >> 16;
-	current.segment_id[1] = (segment_id & 0x00FF00) >> 8;
-	current.segment_id[2] = (segment_id & 0xF000FF);
-	current.owner         = 0x01;
-	current.tier[0]       = 0x7f;
-	current.tier[1]       = 0xff;
-	current.tier[2]       = 0xff;
-	current.tier[3]       = 0xff;
-	current.mbytes[0]     = 0x7f;
-	current.mbytes[1]     = 0x80;
-	err = fd->read(current.data, offset, 991, actual);
-	do {
-		crc = 0xffff;
-		if (err) {
-			return err;
-		}
-		if (actual > 0) {
-			current.packet_number = npak;
-			current.pak_number[0] = npak;
-			current.pak_number[1] = 0;
-			current.type = 0x20;
-			if (offset == 0)
-				current.type |= 0x81;
-			if (actual < 991)
-				current.type |= 0x10;
-			current.offset[0] = ((offset) >> 8) & 0xFF;
-			current.offset[1] = offset & 0xFF;
-			for (int i = 0; i < 1007; ++i) {
-				crc = update_crc(crc, ((char *)&current)[i]);
-			}
-			crc ^= 0xffff;
-			current.crc[0] = (crc >> 8) & 0xFF;
-			current.crc[1] = crc & 0xFF;
-			pak_list.push_back(current);
-			offset = (++npak * 991);
-			memset(current.data, 0, 991);
-			err = fd->read(current.data, offset, 991, actual);
-		}
-	} while(actual > 0);
-
-	return err;
-}
-
 const network_adapter::segment_file::pak& network_adapter::segment_file::operator[](const int index) const
 {
 	assert(index >= 0 && index < size());

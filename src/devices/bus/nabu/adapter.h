@@ -85,7 +85,6 @@ private:
 		};
 	public:
 		std::error_condition read_archive(util::core_file &stream, uint32_t segment_id);
-		std::error_condition load(std::string_view local_path, uint32_t segment_id);
 		const pak& operator[](const int index) const;
 		uint32_t size() { return pak_list.size(); }
 	private:
