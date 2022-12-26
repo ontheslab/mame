@@ -172,7 +172,12 @@ public:
 	// constructor/destructor
 	network_adapter_remote(machine_config const &mconfig, char const *tag, device_t *owner, u32 clock);
 protected:
+	virtual void device_start() override;
 	virtual std::error_condition load_segment(uint32_t segment_id) override;
+private:
+	std::error_condition decrypt_npak(uint8_t *data, size_t length);
+
+	std::unique_ptr<webpp::http_client> m_httpclient;
 };
 
 } // bus::nabu

@@ -12,7 +12,7 @@
 #include "emuopts.h"
 #include "hashing.h"
 #include "unzip.h"
-#include <gcrypt.h>
+#include "des/des_crypt.h"
 
 #define VERBOSE 1
 #include "logmacro.h"
@@ -499,7 +499,7 @@ std::error_condition network_adapter_local::load_segment(uint32_t segment_id)
 
 	if (uncompressed_length > 0x10000) {
 		m_segment_length = 0;
-		return std::errc::not_enough_memory;
+		return std::errc::file_too_large;
 	}
 
 	// prepare a buffer for the segment file
@@ -523,9 +523,75 @@ network_adapter_remote::network_adapter_remote(machine_config const &mconfig, ch
 {
 }
 
+void network_adapter_remote::device_start()
+{
+	network_adapter_base::device_start();
+
+	m_httpclient = std::make_unique<webpp::http_client>("cloud.nabu.ca");
+}
+
 // Load segment from Remote Server (cloud.nabu.ca)
 std::error_condition network_adapter_remote::load_segment(uint32_t segment_id)
 {
+	static const char * hexchars = "0123456789ABCDEF";
+
+	char hashstr[48];
+	uint32_t content_length = 0;
+	std::string url;
+	std::shared_ptr<webpp::http_client::Response> resp;
+
+	segment_id &= 0xFFFFFF;
+
+	if ((m_segment_length != 0 && (segment_id == m_segment)) || segment_id == 0x7fffff) {
+		return std::error_condition();
+	}
+
+	std::string hash_input = util::string_format("%06Xnabu", segment_id);
+	util::md5_t md5 = util::md5_creator().simple(hash_input.c_str(), hash_input.size());
+	for (int i = 0; i < 16; ++i) {
+		uint8_t hnib = (md5.m_raw[i] >> 4) & 0x0F;
+		uint8_t lnib = md5.m_raw[i] & 0x0F;
+		hashstr[i * 3] = hexchars[hnib];
+		hashstr[(i * 3) + 1] = hexchars[lnib];
+		hashstr[(i * 3) + 2] = '-';
+	}
+	hashstr[47] = 0;
+
+	url = util::string_format("/cycle1/%s.npak", hashstr);
+
+	resp = m_httpclient->request("GET", url);
+	if (resp->status_code != "200 OK") {
+		m_segment_length = 0;
+		return std::errc::no_such_file_or_directory;
+	}
+
+	auto header_it = resp->header.find("Content-Length");
+	if (header_it != resp->header.end()) {
+		content_length = stoull(header_it->second);
+	}
+	if (content_length == 0 || content_length > 0x10000) {
+		m_segment_length = 0;
+		return std::errc::file_too_large;
+	}
+	resp->content.read(reinterpret_cast<char *>(&m_segment_data[0]), content_length);
+	if (!resp->content) {
+		m_segment_length = 0;
+		return std::errc::io_error;
+	}
+	return decrypt_npak(&m_segment_data[0], content_length);
+}
+
+std::error_condition network_adapter_remote::decrypt_npak(uint8_t *data, size_t length)
+{
+	int error;
+	char NPAK_KEY[] = {0x6e, 0x58, 0x61, 0x32, 0x62, 0x79, 0x75, 0x7a};
+	char NPAK_IV[] =  {0x0c, 0x15, 0x2b, 0x11, 0x39, 0x23, 0x43, 0x1b};
+
+	error = cbc_crypt(NPAK_KEY, reinterpret_cast<char *>(data), length, DES_DECRYPT | DES_SW, NPAK_IV);
+	if (error) {
+		return std::errc::invalid_argument;
+	}
+
 	return std::error_condition();
 }
 

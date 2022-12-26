@@ -2192,6 +2192,28 @@ project "wdlfft"
 		MAME_DIR .. "3rdparty/wdlfft/fft.h"
 	}
 
+--------------------------------------------------
+-- DES library
+--------------------------------------------------
+
+project "des"
+	uuid "e84d6d8f-0fa3-4d86-9f57-a7648bf4abc3"
+	kind "StaticLib"
+
+	configuration { "gmake or ninja" }
+		buildoptions_c {
+			"-Wno-strict-prototypes",
+		}
+
+	configuration { }
+
+	files {
+		MAME_DIR .. "3rdparty/des/des_impl.c",
+		MAME_DIR .. "3rdparty/des/des_crypt.c",
+		MAME_DIR .. "3rdparty/des/des_crypt.h",
+		MAME_DIR .. "3rdparty/des/des.h"
+	}
+
 
 --------------------------------------------------
 -- ymfm library objects

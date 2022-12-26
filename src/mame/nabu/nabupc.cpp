@@ -54,6 +54,7 @@ static void hcca_devices(device_slot_interface &device)
 	device.option_add("pty",           PSEUDO_TERMINAL);
 	device.option_add("null_modem",    NULL_MODEM);
 	device.option_add("hcca_local",    NABU_NETWORK_LOCAL_ADAPTER);
+	device.option_add("hcca_remote",   NABU_NETWORK_REMOTE_ADAPTER);
 }
 
 static void keyboard_devices(device_slot_interface &device)
