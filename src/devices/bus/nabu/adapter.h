@@ -12,8 +12,15 @@
 #pragma once
 
 #include "bus/rs232/rs232.h"
-#include "diserial.h"
 #include "client_http.hpp"
+#include "diserial.h"
+
+// ARGGH Windows
+#undef PARITY_NONE
+#undef PARITY_ODD
+#undef PARITY_EVEN
+#undef PARITY_MARK
+#undef PARITY_SPACE
 
 namespace bus::nabu {
 
@@ -100,7 +107,7 @@ protected:
 	required_ioport m_config;
 
 	uint32_t m_segment;
-	size_t m_segment_length;
+	uint32_t m_segment_length;
 	uint8_t m_segment_type;
 	std::unique_ptr<uint8_t[]> m_segment_data;
 
