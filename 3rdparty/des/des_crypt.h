@@ -33,7 +33,9 @@
  */
 #ifndef __DES_CRYPT_H__
 #define __DES_CRYPT_H__ 1
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 #define DES_MAXDATA 0x10000	/* max bytes encrypted in one call */
 #define DES_DIRMASK (1 << 0)
 #define DES_ENCRYPT (0*DES_DIRMASK)	/* Encrypt */
@@ -64,7 +66,9 @@ __BEGIN_DECLS
  * Cipher Block Chaining mode
  */
 extern int cbc_crypt (char *__key, char *__buf, unsigned __len,
-		      unsigned __mode, char *__ivec) __THROW;
-__END_DECLS
+		      unsigned __mode, char *__ivec);
+#ifdef __cplusplus
+}
+#endif
 #endif
 
