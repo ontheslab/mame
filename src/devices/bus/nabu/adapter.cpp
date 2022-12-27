@@ -40,7 +40,7 @@ std::error_condition network_adapter_base::segment_file::generate_time_segment()
 
 	buffer[0] = 0x02;
 	buffer[1] = 0x02;
-	buffer[2] = 0x02;
+	buffer[2] = localtime->tm_wday + 1;
 	buffer[3] = 0x54;   // 1984 forever
 	buffer[4] = localtime->tm_mon + 1;
 	buffer[5] = localtime->tm_mday;
