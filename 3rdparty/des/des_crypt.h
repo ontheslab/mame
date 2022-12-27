@@ -33,7 +33,6 @@
  */
 #ifndef __DES_CRYPT_H__
 #define __DES_CRYPT_H__ 1
-#include <features.h>
 __BEGIN_DECLS
 #define DES_MAXDATA 0x10000	/* max bytes encrypted in one call */
 #define DES_DIRMASK (1 << 0)
