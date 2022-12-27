@@ -14,7 +14,7 @@
 #include "unzip.h"
 #include "des/des_crypt.h"
 
-#define VERBOSE 1
+#define VERBOSE 0
 #include "logmacro.h"
 
 
@@ -184,6 +184,7 @@ network_adapter_base::network_adapter_base(machine_config const &mconfig, device
 	: device_t(mconfig, type, tag, owner, clock)
 	, device_buffered_serial_interface(mconfig, *this)
 	, device_rs232_port_interface(mconfig, *this)
+	, m_config(*this, "CONFIG")
 	, m_segment(0)
 	, m_segment_length(0)
 	, m_segment_type(segment_type::PAK)
@@ -192,7 +193,6 @@ network_adapter_base::network_adapter_base(machine_config const &mconfig, device
 	, m_state(state::IDLE)
 	, m_substate(0)
 	, m_pak_offset(0)
-	, m_config(*this, "CONFIG")
 	, m_segment_timer(nullptr)
 {
 }
@@ -517,6 +517,13 @@ std::error_condition network_adapter_local::load_segment(uint32_t segment_id)
 //**************************************************************************
 //  DEVICE INITIALIZATION - Remote
 //**************************************************************************
+static INPUT_PORTS_START( nabu_network_adapter_remote )
+	PORT_INCLUDE( nabu_network_adapter_base )
+	PORT_MODIFY("CONFIG")
+	PORT_CONFNAME(0x02, 0x02, "Network Cycle")
+	PORT_CONFSETTING(0x02, "Cycle 1")
+	PORT_CONFSETTING(0x00, "Cycle 2")
+INPUT_PORTS_END
 
 network_adapter_remote::network_adapter_remote(machine_config const &mconfig, char const *tag, device_t *owner, uint32_t clock)
 	: network_adapter_base(mconfig, NABU_NETWORK_REMOTE_ADAPTER, tag, owner, clock)
@@ -528,6 +535,20 @@ void network_adapter_remote::device_start()
 	network_adapter_base::device_start();
 
 	m_httpclient = std::make_unique<webpp::http_client>("cloud.nabu.ca");
+
+	save_item(NAME(m_cycle1));
+}
+
+void network_adapter_remote::device_reset()
+{
+	network_adapter_base::device_reset();
+
+	m_cycle1 = bool(m_config->read() & 2);
+}
+
+ioport_constructor network_adapter_remote::device_input_ports() const
+{
+	return INPUT_PORTS_NAME( nabu_network_adapter_remote );
 }
 
 // Load segment from Remote Server (cloud.nabu.ca)
@@ -557,7 +578,11 @@ std::error_condition network_adapter_remote::load_segment(uint32_t segment_id)
 	}
 	hashstr[47] = 0;
 
-	url = util::string_format("/cycle1/%s.npak", hashstr);
+	if (m_cycle1) {
+		url = util::string_format("/cycle1/%s.npak", hashstr);
+	} else {
+		url = util::string_format("/cycle2/%s.npak", hashstr);
+	}
 
 	resp = m_httpclient->request("GET", url);
 	if (resp->status_code != "200 OK") {

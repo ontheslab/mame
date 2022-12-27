@@ -97,6 +97,7 @@ protected:
 
 	enum segment_type {PAK, NABU};
 
+	required_ioport m_config;
 
 	uint32_t m_segment;
 	size_t m_segment_length;
@@ -135,8 +136,6 @@ private:
 	uint8_t  m_substate;
 	uint16_t m_pak_offset;
 
-	required_ioport m_config;
-
 	emu_timer *m_segment_timer;
 
 };
@@ -173,9 +172,13 @@ public:
 	network_adapter_remote(machine_config const &mconfig, char const *tag, device_t *owner, u32 clock);
 protected:
 	virtual void device_start() override;
+	virtual void device_reset() override;
+	virtual ioport_constructor device_input_ports() const override;
 	virtual std::error_condition load_segment(uint32_t segment_id) override;
 private:
 	std::error_condition decrypt_npak(uint8_t *data, size_t length);
+
+	bool m_cycle1;
 
 	std::unique_ptr<webpp::http_client> m_httpclient;
 };
