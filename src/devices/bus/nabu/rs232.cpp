@@ -44,6 +44,7 @@ DEVICE_INPUT_DEFAULTS_END
 void rs232_device::device_add_mconfig(machine_config &config)
 {
 	I8251(config, m_i8251, clock() / 2);
+	m_i8251->rxrdy_handler().set(FUNC(rs232_device::rxrdy_w));
 	m_i8251->txd_handler().set("rs232", FUNC(rs232_port_device::write_txd));
 	PIT8253(config, m_pit8253, clock() / 2);
 	m_pit8253->set_clk<0>(clock() / 2);
@@ -69,6 +70,11 @@ void rs232_device::device_start()
 //-------------------------------------------------
 void rs232_device::device_reset()
 {
+}
+
+WRITE_LINE_MEMBER(rs232_device::rxrdy_w)
+{
+	get_slot()->int_w(!state);
 }
 
 uint8_t rs232_device::read(offs_t offset)

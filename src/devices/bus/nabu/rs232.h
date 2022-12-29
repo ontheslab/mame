@@ -38,6 +38,8 @@ protected:
 
 	// optional information overrides
 	virtual void device_add_mconfig(machine_config &config) override;
+
+	DECLARE_WRITE_LINE_MEMBER(rxrdy_w);
 private:
 	required_device<i8251_device> m_i8251;
 	required_device<pit8253_device> m_pit8253;
