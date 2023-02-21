@@ -18,11 +18,6 @@
 
 const nabupc_format::format nabupc_format::formats[] =
 {
-	{ // 200k 40 track single sided double density (osborne)
-		floppy_image::FF_525, floppy_image::SSDD,
-		40, 1, 32, 22, 80,
-		{0}
-	},
 	{ // 200k 40 track single sided double density (nabu)
 		floppy_image::FF_525, floppy_image::SSDD,
 		40, 1, 32, 22, 80,
@@ -52,14 +47,10 @@ bool nabupc_format::supports_save() const
 
 int nabupc_format::find_format(util::random_read &io, uint32_t form_factor, const std::vector<uint32_t> &variants) const
 {
-	uint8_t  sig[6];
 	uint64_t size;
-	size_t actual;
 	if (io.length(size)) {
 		return -1;
 	}
-
-	io.read_at(0x4d1, sig, 6, actual);
 
 	for (int i = 0; formats[i].form_factor; i++) {
 		const format &f = formats[i];
@@ -70,12 +61,8 @@ int nabupc_format::find_format(util::random_read &io, uint32_t form_factor, cons
 		if(!variants.empty() && !has_variant(variants, f.variant)) {
 			continue;
 		}
-		if (memcmp(sig, "CPMLDR", 6) != 0 && f.dpb[1] == 0 && size == (uint64_t)sector_size * sector_count * f.track_count * f.head_count) {
-			LOG_FORMATS("nabupc: Found osborne disk: %d\n", i);
-			return i;
-		}
-		if (memcmp(sig, "CPMLDR", 6) == 0 && f.dpb[1] != 0 && size == (uint64_t)sector_size * sector_count * f.track_count * f.head_count) {
-			LOG_FORMATS("nabupc: Found nabu disk: %d\n", i);
+		if (size == (uint64_t)sector_size * sector_count * f.track_count * f.head_count) {
+			LOG_FORMATS("nabupc: Found nabupc disk: %d\n", i);
 			return i;
 		}
 		LOG_FORMATS("nabupc: no match\n");
