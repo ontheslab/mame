@@ -16,7 +16,22 @@
 
 class nabupc_format : public floppy_image_format_t {
 public:
-	nabupc_format(bool cpm);
+	struct format {
+		uint32_t form_factor;      // See floppy_image for possible values
+		uint32_t variant;          // See floppy_image for possible values
+		int track_count;
+		int head_count;
+		int gap_1;
+		int gap_2;
+		int gap_3;
+		uint8_t dpb[18];
+	};
+
+	nabupc_format();
+
+	virtual const char *name() const override;
+	virtual const char *description() const override;
+	virtual const char *extensions() const override;
 
 	virtual int identify(util::random_read &io, uint32_t form_factor, const std::vector<uint32_t> &variants) const override;
 	virtual bool load(util::random_read &io, uint32_t form_factor, const std::vector<uint32_t> &variants, floppy_image *image) const override;
@@ -25,30 +40,14 @@ public:
 	virtual bool supports_save() const override;
 
 protected:
-	static void build_nabu_track_mfm(int track, int head, floppy_image *image, int cell_count, int sector_count, const desc_pc_sector *sects, int gap_3, int gap_1, int gap_2, bool cpmldr);
+	static void build_nabu_track_mfm(int track, int head, floppy_image *image, int cell_count, int sector_count, const desc_pc_sector *sects, int gap_3, int gap_1, int gap_2, const uint8_t *dpb);
+	int find_format(util::random_read &io, uint32_t form_factor, const std::vector<uint32_t> &variants) const;
 private:
-	const bool m_cpmldr;
-	static constexpr uint8_t dpb_table[]{0x19, 0x0F, 0x2D, 0x1A, 0x00, 0x28, 0x00, 0x03, 0x07, 0x00, 0xC2, 0x00, 0x5F, 0x00, 0xE0, 0x00, 0x00, 0x18, 0x01, 0x00, 0x03, 0x07};
+	static constexpr int sector_count = 5;
+	static constexpr int sector_size = 1024;
+	static const format formats[];
 };
 
-
-class nabupc_cpm_format : public nabupc_format {
-public:
-	nabupc_cpm_format();
-	virtual const char *name() const override;
-	virtual const char *description() const override;
-	virtual const char *extensions() const override;
-};
-
-class nabupc_osborne_format : public nabupc_format {
-public:
-	nabupc_osborne_format();
-	virtual const char *name() const override;
-	virtual const char *description() const override;
-	virtual const char *extensions() const override;
-};
-
-extern const nabupc_cpm_format FLOPPY_NABUPC_CPM_FORMAT;
-extern const nabupc_osborne_format FLOPPY_NABUPC_OSBORNE_FORMAT;
+extern const nabupc_format FLOPPY_NABUPC_FORMAT;
 
 #endif // MAME_FORMATS_NABUPC_DSK_H

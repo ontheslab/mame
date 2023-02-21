@@ -12,11 +12,36 @@
 
 #include "nabupc_dsk.h"
 
+#include "imageutl.h"
 #include "ioprocs.h"
 #include "strformat.h"
 
+const nabupc_format::format nabupc_format::formats[] =
+{
+	{ // 200k 40 track single sided double density (osborne)
+		floppy_image::FF_525, floppy_image::SSDD,
+		40, 1, 32, 22, 80,
+		{0}
+	},
+	{ // 200k 40 track single sided double density (nabu)
+		floppy_image::FF_525, floppy_image::SSDD,
+		40, 1, 32, 22, 80,
+		{0x00, 0x28, 0x00, 0x03, 0x07, 0x00, 0xC2, 0x00, 0x5F, 0x00, 0xE0, 0x00, 0x00, 0x18, 0x01, 0x00, 0x03, 0x07}
+	},
+	{ // 400k 40 track double sided double density (nabu)
+		floppy_image::FF_525, floppy_image::DSDD,
+		40, 2, 32, 22, 80,
+		{0x01, 0x28, 0x00, 0x04, 0x0F, 0x01, 0xC4, 0x00, 0xBF, 0x00, 0xE0, 0x00, 0x00, 0x30, 0x01, 0x00, 0x03, 0x07}
+	},
+	{ // 800k 80 track double sided double density (nabu)
+		floppy_image::FF_35, floppy_image::DSDD,
+		80, 2, 32, 22, 80,
+		{0x02, 0x28, 0x00, 0x04, 0x0F, 0x00, 0x8C, 0x01, 0x7F, 0x01, 0xFC, 0x00, 0x00, 0x61, 0x01, 0x00, 0x03, 0x07}
+	},
+	{}
+};
 
-nabupc_format::nabupc_format(bool cpm) : m_cpmldr(cpm)
+nabupc_format::nabupc_format()
 {
 }
 
@@ -25,37 +50,64 @@ bool nabupc_format::supports_save() const
 	return true;
 }
 
-int nabupc_format::identify(util::random_read &io, uint32_t form_factor, const std::vector<uint32_t> &variants) const
+int nabupc_format::find_format(util::random_read &io, uint32_t form_factor, const std::vector<uint32_t> &variants) const
 {
+	uint8_t  sig[6];
 	uint64_t size;
-	uint8_t  sign[7];
-	size_t   actual;
-	bool     cpm = false;
-
-	sign[6] = 0;
-	if (io.length(size))
-		return 0;
-
-	if (size != 204800)
-		return 0;
-
-	io.read_at(0x4d1, sign, 6, actual);
-	if (memcmp(sign, "CPMLDR", 6) == 0) {
-		cpm = true;
+	size_t actual;
+	if (io.length(size)) {
+		return -1;
 	}
 
-	return FIFID_SIZE | (m_cpmldr == cpm ? FIFID_HINT : 0);
+	io.read_at(0x4d1, sig, 6, actual);
+
+	for (int i = 0; formats[i].form_factor; i++) {
+		const format &f = formats[i];
+
+		if (form_factor != floppy_image::FF_UNKNOWN && form_factor != f.form_factor) {
+			continue;
+		}
+		if(!variants.empty() && !has_variant(variants, f.variant)) {
+			continue;
+		}
+		if (memcmp(sig, "CPMLDR", 6) != 0 && f.dpb[1] == 0 && size == (uint64_t)sector_size * sector_count * f.track_count * f.head_count) {
+			LOG_FORMATS("nabupc: Found osborne disk: %d\n", i);
+			return i;
+		}
+		if (memcmp(sig, "CPMLDR", 6) == 0 && f.dpb[1] != 0 && size == (uint64_t)sector_size * sector_count * f.track_count * f.head_count) {
+			LOG_FORMATS("nabupc: Found nabu disk: %d\n", i);
+			return i;
+		}
+		LOG_FORMATS("nabupc: no match\n");
+	}
+	return -1;
 }
 
-void nabupc_format::build_nabu_track_mfm(int track, int head, floppy_image *image, int cell_count, int sector_count, const desc_pc_sector *sects, int gap_3, int gap_1, int gap_2, bool cpmldr)
+int nabupc_format::identify(util::random_read &io, uint32_t form_factor, const std::vector<uint32_t> &variants) const
+{
+
+	int const format = find_format(io, form_factor, variants);
+
+	if (format == -1) {
+		return 0;
+	}
+
+	return FIFID_SIZE | FIFID_STRUCT;
+}
+
+void nabupc_format::build_nabu_track_mfm(int track, int head, floppy_image *image, int cell_count, int sector_count, const desc_pc_sector *sects, int gap_3, int gap_1, int gap_2, const uint8_t *dpb)
 {
 	std::vector<uint32_t> track_data;
 
-	if (cpmldr && track == 0) {
+	if (dpb[1] != 0 && track == 0 && head == 0) {
 		for(int i=0; i< 2; i++) raw_w(track_data, 16, 0x4489);
 		raw_w(track_data, 16, 0x1054);  // 4e
 		for(int i=0; i<11; i++) mfm_w(track_data, 8, 0x4e);
-		for(int i=0; i<sizeof(dpb_table); i++) mfm_w(track_data, 8, dpb_table[i]);
+		mfm_w(track_data, 8, 0x19);
+		mfm_w(track_data, 8, 0x0F);
+		mfm_w(track_data, 8, 0x2D);
+		mfm_w(track_data, 8, 0x1A);
+		for(int i=0; i < 18; i++) mfm_w(track_data, 8, dpb[i]);
 	}
 
 	for(int i=0; i<gap_1; i++) mfm_w(track_data, 8, 0x4e);
@@ -117,22 +169,32 @@ void nabupc_format::build_nabu_track_mfm(int track, int head, floppy_image *imag
 
 bool nabupc_format::load(util::random_read &io, uint32_t form_factor, const std::vector<uint32_t> &variants, floppy_image *image) const
 {
-	for (int track = 0; track < 40; track++) {
-			desc_pc_sector sects[5];
-			uint8_t sectdata[5*1024];
+	int const type = find_format(io, form_factor, variants);
+
+	if (type == -1) {
+		return false;
+	}
+
+	const format &f = formats[type];
+
+	for (int track = 0; track < f.track_count; track++) {
+		for(int head = 0; head < f.head_count; head++) {
+			desc_pc_sector sects[sector_count];
+			uint8_t sectdata[sector_count * sector_size];
 			size_t actual;
-			io.read_at(5*1024*track, sectdata, 5*1024, actual);
-			for (int i = 0; i < 5; i++) {
+			io.read_at((track*f.head_count+head)*sector_count*sector_size, sectdata, sector_count*sector_size, actual);
+			for (int i = 0; i < sector_count; i++) {
 				sects[i].track = track;
-				sects[i].head = 0;
+				sects[i].head = head;
 				sects[i].sector = i+1;
 				sects[i].size = 3;
-				sects[i].actual_size = 1024;
-				sects[i].data = sectdata + 1024*i;
+				sects[i].actual_size = sector_size;
+				sects[i].data = sectdata + sector_size*i;
 				sects[i].deleted = false;
 				sects[i].bad_crc = false;
 			}
-			build_nabu_track_mfm(track, 0, image, 100000, 5, sects, 80, 32, 22, m_cpmldr);
+			build_nabu_track_mfm(track, head, image, 100000, sector_count, sects, f.gap_3, f.gap_1, f.gap_2, f.dpb);
+		}
 	}
 	return true;
 }
@@ -140,59 +202,37 @@ bool nabupc_format::load(util::random_read &io, uint32_t form_factor, const std:
 bool nabupc_format::save(util::random_read_write &io, const std::vector<uint32_t> &variants, floppy_image *image) const
 {
 
-	uint64_t file_offset = 0;
-
-	for (int track = 0; track < 40; track++) {
-		auto bitstream = generate_bitstream_from_track(track, 0, 2000, image);
-		auto sectors = extract_sectors_from_bitstream_mfm_pc(bitstream);
-
-		for (int i = 0; i < 5; i++) {
-			size_t actual;
-			io.write_at(file_offset, sectors[i + 1].data(), 1024, actual);
-			file_offset += 1024;
+	int heads, tracks;
+	image->get_actual_geometry(tracks, heads);
+	for (int track = 0; track < tracks; track++) {
+		for (int head = 0; head < heads; head++) {
+			uint64_t file_offset = (track*heads+head)*sector_count*sector_size;
+			auto bitstream = generate_bitstream_from_track(track, head, 2000, image);
+			auto sectors = extract_sectors_from_bitstream_mfm_pc(bitstream);
+			for (int i = 0; i < sector_count; i++) {
+				size_t actual;
+				io.write_at(file_offset, sectors[i + 1].data(), sector_size, actual);
+				file_offset += sector_size;
+			}
 		}
 	}
 
 	return true;
 }
 
-nabupc_cpm_format::nabupc_cpm_format() : nabupc_format(true)
+const char *nabupc_format::name() const
 {
+	return "nabupc";
 }
 
-const char *nabupc_cpm_format::name() const
-{
-	return "nabupc_cpm";
-}
-
-const char *nabupc_cpm_format::description() const
+const char *nabupc_format::description() const
 {
 	return "NABU PC CPM Disk Image";
 }
 
-const char *nabupc_cpm_format::extensions() const
+const char *nabupc_format::extensions() const
 {
-	return "img";
+	return "img,dsk";
 }
 
-nabupc_osborne_format::nabupc_osborne_format() : nabupc_format(false)
-{
-}
-
-const char *nabupc_osborne_format::name() const
-{
-	return "nabupc_osborne";
-}
-
-const char *nabupc_osborne_format::description() const
-{
-	return "NABU PC Data Disk Image";
-}
-
-const char *nabupc_osborne_format::extensions() const
-{
-	return "img";
-}
-
-const nabupc_cpm_format FLOPPY_NABUPC_CPM_FORMAT;
-const nabupc_osborne_format FLOPPY_NABUPC_OSBORNE_FORMAT;
+const nabupc_format FLOPPY_NABUPC_FORMAT;

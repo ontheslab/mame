@@ -23,6 +23,7 @@ namespace bus::nabu {
 static void nabu_fdc_drives(device_slot_interface &device)
 {
 	device.option_add("525dd", FLOPPY_525_DD);
+	device.option_add("35dd", FLOPPY_35_DD);
 }
 
 //-------------------------------------------------
@@ -65,8 +66,7 @@ void fdc_device::device_reset()
 void fdc_device::floppy_formats(format_registration &fr)
 {
 	fr.add(FLOPPY_IMD_FORMAT);
-	fr.add(FLOPPY_NABUPC_CPM_FORMAT);
-	fr.add(FLOPPY_NABUPC_OSBORNE_FORMAT);
+	fr.add(FLOPPY_NABUPC_FORMAT);
 }
 
 void fdc_device::ds_w(uint8_t data)
