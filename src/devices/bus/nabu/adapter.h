@@ -70,7 +70,7 @@ protected:
 		std::error_condition parse_raw_segment(uint32_t segment_id, const uint8_t *data, size_t length);
 
 		const pak& operator[](const int index) const;
-		uint32_t size() { return pak_list.size(); }
+		uint32_t size() const { return pak_list.size(); }
 
 	private:
 		static constexpr uint16_t crc_table[256] = {
