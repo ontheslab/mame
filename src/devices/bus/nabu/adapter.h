@@ -124,7 +124,7 @@ private:
 	virtual void received_byte(uint8_t byte) override;
 
 	// State Machine
-	enum state {IDLE, HEX81_REQUEST, CHANNEL_REQUEST, SEGMENT_REQUEST, SEND_SEGMENT};
+	enum state {IDLE, SETSTATUS_REQUEST, GETSTATUS_REQUEST, CHANNEL_REQUEST, SEGMENT_REQUEST, SEND_SEGMENT};
 
 	TIMER_CALLBACK_MEMBER(segment_tick);
 
@@ -133,7 +133,8 @@ private:
 	void idle(uint8_t byte);
 	void channel_request(uint8_t byte);
 	void segment_request(uint8_t byte);
-	void hex81_request(uint8_t byte);
+	void set_status(uint8_t byte);
+	void get_status(uint8_t byte);
 	void send_segment(uint8_t byte);
 
 

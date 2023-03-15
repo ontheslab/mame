@@ -99,7 +99,7 @@ std::error_condition network_adapter_base::segment_file::parse_raw_segment(uint3
 	if (err)
 		return err;
 
-	memset(current.data, 0, 991);
+	memset(current.data, 0, 993);
 	current.segment_id[0] = (segment_id & 0xFF0000) >> 16;
 	current.segment_id[1] = (segment_id & 0x00FF00) >> 8;
 	current.segment_id[2] = (segment_id & 0xF000FF);
@@ -264,8 +264,11 @@ void network_adapter_base::received_byte(uint8_t byte)
 	case state::SEGMENT_REQUEST:
 		segment_request(byte);
 		break;
-	case state::HEX81_REQUEST:
-		hex81_request(byte);
+	case state::SETSTATUS_REQUEST:
+		set_status(byte);
+		break;
+	case state::GETSTATUS_REQUEST:
+		get_status(byte);
 		break;
 	case state::SEND_SEGMENT:
 		send_segment(byte);
@@ -299,26 +302,18 @@ void network_adapter_base::idle(uint8_t byte)
 	case 0x82:
 		transmit_byte(0x10);
 		transmit_byte(0x06);
+		m_state = state::GETSTATUS_REQUEST;
 		break;
 	case 0x81:
 		transmit_byte(0x10);
 		transmit_byte(0x06);
-		m_state = state::HEX81_REQUEST;
-		break;
-	case 0x01:
-		transmit_byte(bool(m_config->read() & 1) ? 0x9F : 0x1F);
-		transmit_byte(0x10);
-		transmit_byte(0xE1);
-		break;
-	case 0x1E:
-		transmit_byte(0x10);
-		transmit_byte(0xE1);
+		m_state = state::SETSTATUS_REQUEST;
 		break;
 	}
 
 }
 
-void network_adapter_base::hex81_request(uint8_t byte)
+void network_adapter_base::set_status(uint8_t byte)
 {
 	if (m_substate == 1) {
 		transmit_byte(0xE4);
@@ -326,6 +321,16 @@ void network_adapter_base::hex81_request(uint8_t byte)
 	}
 	++m_substate;
 
+}
+
+void network_adapter_base::get_status(uint8_t byte)
+{
+	if (byte == 0x01) {
+		transmit_byte(bool(m_config->read() & 1) ? 0x9F : 0x1F);
+	}
+	transmit_byte(0x10);
+	transmit_byte(0xE1);
+	m_state = state::IDLE;
 }
 
 void network_adapter_base::channel_request(uint8_t byte)
