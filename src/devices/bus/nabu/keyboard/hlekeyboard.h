@@ -48,6 +48,7 @@ private:
 	static constexpr int BAUD = 6'993;
 
 	TIMER_CALLBACK_MEMBER(watchdog_tick);
+	TIMER_CALLBACK_MEMBER(delay_tick);
 
 	virtual void received_byte(uint8_t byte) override {}
 
@@ -56,6 +57,7 @@ private:
 	required_ioport m_gameport2;
 
 	emu_timer *m_watchdog_timer;
+	emu_timer *m_delay_timer;
 	uint8_t m_prev_gameport1;
 	uint8_t m_prev_gameport2;
 };

@@ -189,6 +189,7 @@ hle_keyboard_device::hle_keyboard_device(machine_config const &mconfig, char con
 	, m_gameport1(*this, "JOYSTICK1")
 	, m_gameport2(*this, "JOYSTICK2")
 	, m_watchdog_timer(nullptr)
+	, m_delay_timer(nullptr)
 {
 }
 
@@ -199,6 +200,7 @@ void hle_keyboard_device::device_add_mconfig(machine_config &config)
 void hle_keyboard_device::device_start()
 {
 	m_watchdog_timer = timer_alloc(FUNC(hle_keyboard_device::watchdog_tick), this);
+	m_delay_timer = timer_alloc(FUNC(hle_keyboard_device::delay_tick), this);
 
 	save_item(NAME(m_prev_gameport1));
 	save_item(NAME(m_prev_gameport2));
@@ -221,7 +223,7 @@ void hle_keyboard_device::device_reset()
 
 	// kick the base
 	reset_key_state();
-	start_processing(attotime::from_hz(BAUD));
+	start_processing(attotime::from_hz(9'600));
 }
 
 TIMER_CALLBACK_MEMBER(hle_keyboard_device::watchdog_tick)
@@ -232,6 +234,11 @@ TIMER_CALLBACK_MEMBER(hle_keyboard_device::watchdog_tick)
 	} else {
 		transmit_byte(0x94);
 	}
+}
+
+TIMER_CALLBACK_MEMBER(hle_keyboard_device::delay_tick)
+{
+	transmit_byte(param);
 }
 
 void hle_keyboard_device::tra_callback()
@@ -276,13 +283,13 @@ void hle_keyboard_device::scan_complete()
 	if (gameport1 != m_prev_gameport1) {
 		m_prev_gameport1 = gameport1;
 		transmit_byte(0x80);
-		transmit_byte(gameport1);
+		m_delay_timer->adjust(attotime::from_usec(5500), gameport1, attotime::never);
 	}
 
 	if (gameport2 != m_prev_gameport2) {
 		m_prev_gameport2 = gameport2;
 		transmit_byte(0x81);
-		transmit_byte(gameport2);
+		m_delay_timer->adjust(attotime::from_usec(5500), gameport2, attotime::never);
 	}
 }
 
