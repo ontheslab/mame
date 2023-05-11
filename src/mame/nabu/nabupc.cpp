@@ -234,7 +234,7 @@ void nabupc_state::nabupc(machine_config &config)
 	I8251(config, m_kbduart, 10.738635_MHz_XTAL / 6);
 	m_kbduart->rxrdy_handler().set(*this, FUNC(nabupc_state::rxrdy_w));
 
-	rs232_port_device &kbd(RS232_PORT(config, "kbd", keyboard_devices, "nabu_hle"));
+	rs232_port_device &kbd(RS232_PORT(config, "kbd", keyboard_devices, "nabu"));
 	kbd.rxd_handler().set(m_kbduart, FUNC(i8251_device::write_rxd));
 
 	// HCCA
