@@ -12,7 +12,6 @@
 #include "emuopts.h"
 #include "hashing.h"
 #include "unzip.h"
-#include "des/des_crypt.h"
 
 #define VERBOSE 0
 #include "logmacro.h"
@@ -394,7 +393,7 @@ void network_adapter_base::send_segment(uint8_t byte)
 		}
 		m_pak_offset = 0;
 		if (!parse_segment(m_segment_data.get(), m_segment_length)) {
-			m_segment_timer->adjust(attotime::zero, 0, attotime::from_hz(7'500));
+			m_segment_timer->adjust(attotime::zero, 0, attotime::from_hz(5'500));
 			LOG("Segment sending, returning to idle state\n");
 		} else {
 			LOG("Failed to find segment: %06d, restarting\n", m_segment);
@@ -525,9 +524,10 @@ std::error_condition network_adapter_local::load_segment(uint32_t segment_id)
 static INPUT_PORTS_START( nabu_network_adapter_remote )
 	PORT_INCLUDE( nabu_network_adapter_base )
 	PORT_MODIFY("CONFIG")
-	PORT_CONFNAME(0x02, 0x02, "Network Cycle")
+	PORT_CONFNAME(0x06, 0x02, "Network Cycle")
 	PORT_CONFSETTING(0x02, "Cycle 1")
-	PORT_CONFSETTING(0x00, "Cycle 2")
+	PORT_CONFSETTING(0x04, "Cycle 2")
+	PORT_CONFSETTING(0x06, "Cycle 3")
 INPUT_PORTS_END
 
 network_adapter_remote::network_adapter_remote(machine_config const &mconfig, char const *tag, device_t *owner, uint32_t clock)
@@ -541,14 +541,14 @@ void network_adapter_remote::device_start()
 
 	m_httpclient = std::make_unique<webpp::http_client>("cloud.nabu.ca");
 
-	save_item(NAME(m_cycle1));
+	save_item(NAME(m_cycle));
 }
 
 void network_adapter_remote::device_reset()
 {
 	network_adapter_base::device_reset();
 
-	m_cycle1 = bool(m_config->read() & 2);
+	m_cycle = (m_config->read()  >> 1 ) & 3;
 }
 
 ioport_constructor network_adapter_remote::device_input_ports() const
@@ -559,9 +559,6 @@ ioport_constructor network_adapter_remote::device_input_ports() const
 // Load segment from Remote Server (cloud.nabu.ca)
 std::error_condition network_adapter_remote::load_segment(uint32_t segment_id)
 {
-	static const char * hexchars = "0123456789ABCDEF";
-
-	char hashstr[48];
 	uint32_t content_length = 0;
 	std::string url;
 	std::shared_ptr<webpp::http_client::Response> resp;
@@ -572,21 +569,14 @@ std::error_condition network_adapter_remote::load_segment(uint32_t segment_id)
 		return std::error_condition();
 	}
 
-	std::string hash_input = util::string_format("%06Xnabu", segment_id);
-	util::md5_t md5 = util::md5_creator().simple(hash_input.c_str(), hash_input.size());
-	for (int i = 0; i < 16; ++i) {
-		uint8_t hnib = (md5.m_raw[i] >> 4) & 0x0F;
-		uint8_t lnib = md5.m_raw[i] & 0x0F;
-		hashstr[i * 3] = hexchars[hnib];
-		hashstr[(i * 3) + 1] = hexchars[lnib];
-		hashstr[(i * 3) + 2] = '-';
-	}
-	hashstr[47] = 0;
+	std::string segment_filename = util::string_format("%06X.pak", segment_id);
 
-	if (m_cycle1) {
-		url = util::string_format("/cycle1/%s.npak", hashstr);
+	if (m_cycle == 1) {
+		url = util::string_format("/cycle%%201%%20raw/%s", segment_filename);
+	} else if (m_cycle == 2) {
+		url = util::string_format("/cycle%%202%%20raw/%s", segment_filename);
 	} else {
-		url = util::string_format("/cycle2/%s.npak", hashstr);
+		url = util::string_format("/cycle%%203%%20raw/%s", segment_filename);
 	}
 
 	resp = m_httpclient->request("GET", url);
@@ -608,20 +598,6 @@ std::error_condition network_adapter_remote::load_segment(uint32_t segment_id)
 		m_segment_length = 0;
 		return std::errc::io_error;
 	}
-	return decrypt_npak(&m_segment_data[0], content_length);
-}
-
-std::error_condition network_adapter_remote::decrypt_npak(uint8_t *data, size_t length)
-{
-	int error;
-	char NPAK_KEY[] = {0x6e, 0x58, 0x61, 0x32, 0x62, 0x79, 0x75, 0x7a};
-	char NPAK_IV[] =  {0x0c, 0x15, 0x2b, 0x11, 0x39, 0x23, 0x43, 0x1b};
-
-	error = cbc_crypt(NPAK_KEY, reinterpret_cast<char *>(data), length, DES_DECRYPT | DES_SW, NPAK_IV);
-	if (error) {
-		return std::errc::invalid_argument;
-	}
-
 	return std::error_condition();
 }
 

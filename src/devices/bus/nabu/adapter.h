@@ -184,9 +184,7 @@ protected:
 	virtual ioport_constructor device_input_ports() const override;
 	virtual std::error_condition load_segment(uint32_t segment_id) override;
 private:
-	std::error_condition decrypt_npak(uint8_t *data, size_t length);
-
-	bool m_cycle1;
+	int m_cycle;
 
 	std::unique_ptr<webpp::http_client> m_httpclient;
 };
