@@ -174,10 +174,22 @@ protected:
 /* NABU PC Network Adapter Remote */
 class network_adapter_remote
 	: public network_adapter_base
+	, public device_image_interface
 {
 public:
 	// constructor/destructor
 	network_adapter_remote(machine_config const &mconfig, char const *tag, device_t *owner, u32 clock);
+
+	// image-level overrides
+	virtual bool is_readable()  const noexcept override { return true; }
+	virtual bool is_writeable() const noexcept override { return false; }
+	virtual bool is_creatable() const noexcept override { return false; }
+	virtual bool is_reset_on_load() const noexcept override { return true; }
+	virtual bool core_opens_image_file() const noexcept override { return false; }
+	virtual const char *file_extensions() const noexcept override { return ""; }
+	virtual const char *image_type_name() const noexcept override { return "server_name"; }
+	virtual const char *image_brief_type_name() const noexcept override { return "server"; }
+	virtual image_init_result call_load() override;
 protected:
 	virtual void device_start() override;
 	virtual void device_reset() override;

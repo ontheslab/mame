@@ -532,14 +532,20 @@ INPUT_PORTS_END
 
 network_adapter_remote::network_adapter_remote(machine_config const &mconfig, char const *tag, device_t *owner, uint32_t clock)
 	: network_adapter_base(mconfig, NABU_NETWORK_REMOTE_ADAPTER, tag, owner, clock)
+	, device_image_interface(mconfig, *this)
 {
+}
+
+image_init_result network_adapter_remote::call_load()
+{
+	m_httpclient = std::make_unique<webpp::http_client>(filename());
+
+	return image_init_result::PASS;
 }
 
 void network_adapter_remote::device_start()
 {
 	network_adapter_base::device_start();
-
-	m_httpclient = std::make_unique<webpp::http_client>("cloud.nabu.ca");
 
 	save_item(NAME(m_cycle));
 }
@@ -547,6 +553,10 @@ void network_adapter_remote::device_start()
 void network_adapter_remote::device_reset()
 {
 	network_adapter_base::device_reset();
+
+	if (filename() == nullptr) {
+		load("cloud.nabu.ca");
+	}
 
 	m_cycle = (m_config->read()  >> 1 ) & 3;
 }
