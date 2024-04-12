@@ -45104,4 +45104,7 @@ mtu130
 vl1
 
 @source:nabu/nabupc.cpp
-nabupc                            //
+nabupc                            // Default NabuPc
+
+@source:nabu80/nabupc80.cpp
+nabupc80                          // Patched 80Col NabuPc
