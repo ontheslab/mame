@@ -9,10 +9,10 @@
 
 #include "bus/centronics/ctronics.h"
 #include "bus/nabu/option.h"
+#include "bus/nabu/video/video.h"
 #include "cpu/z80/z80.h"
 #include "sound/ay8910.h"
 #include "speaker.h"
-#include "video/tms9928a.h"
 #include "machine/ay31015.h"
 #include "machine/i8251.h"
 #include "machine/ram.h"
@@ -55,8 +55,7 @@ private:
 	IRQ_CALLBACK_MEMBER(int_ack_cb);
 
 	required_device<z80_device> m_maincpu;
-	required_device<tms9928a_device> m_tms9928a;
-	required_device<screen_device> m_screen;
+	required_device<bus::nabu::video_port_device> m_video_card;
 	required_device<ay8910_device> m_ay8910;
 	required_device<speaker_device> m_speaker;
 	required_device<i8251_device> m_kbduart;

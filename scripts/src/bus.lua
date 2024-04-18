@@ -5109,3 +5109,20 @@ if (BUSES["NABU_KEYBOARD"]~=null) then
 		MAME_DIR .. "src/devices/bus/nabu/keyboard/hlekeyboard.h",
 	}
 end
+
+---------------------------------------------------
+--
+--@src/devices/bus/nabu/video/video.h,BUSES["NABU_VIDEO"] = true
+---------------------------------------------------
+
+if (BUSES["NABU_VIDEO"]~=null) then
+	files {
+		MAME_DIR .. "src/devices/bus/nabu/video/video.cpp",
+		MAME_DIR .. "src/devices/bus/nabu/video/video.h",
+		MAME_DIR .. "src/devices/bus/nabu/video/9918a.cpp",
+		MAME_DIR .. "src/devices/bus/nabu/video/9918a.h",
+		MAME_DIR .. "src/devices/bus/nabu/video/9938.cpp",
+		MAME_DIR .. "src/devices/bus/nabu/video/9938.h",
+	}
+end
+
