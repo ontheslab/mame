@@ -9,6 +9,7 @@
 #include "bus/nabu/adapter.h"
 #include "bus/nabu/keyboard/hlekeyboard.h"
 #include "bus/nabu/keyboard/nabu_kbd.h"
+#include "bus/nabu/video/video.h"
 #include "bus/rs232/null_modem.h"
 #include "bus/rs232/pty.h"
 #include "bus/rs232/rs232.h"
@@ -180,8 +181,7 @@ static __inline f9318_out_t f9318(f9318_in_t in)
 nabupc_state::nabupc_state(const machine_config &mconfig, device_type type, const char *tag)
 	: driver_device(mconfig, type, tag)
 	, m_maincpu(*this, "maincpu")
-	, m_tms9928a(*this, "tms9928a")
-	, m_screen(*this, "screen")
+	, m_video_card(*this, "nabu_video")
 	, m_ay8910(*this, "ay8910")
 	, m_speaker(*this, "speaker")
 	, m_kbduart(*this, "kbduart")
@@ -214,12 +214,8 @@ void nabupc_state::nabupc(machine_config &config)
 	RAM(config, RAM_TAG).set_default_size("64K");
 
 	// Video hardware
-	SCREEN(config, m_screen, SCREEN_TYPE_RASTER);
-
-	TMS9918A(config, m_tms9928a, 10.738635_MHz_XTAL);
-	m_tms9928a->set_screen(m_screen);
-	m_tms9928a->set_vram_size(0x4000);
-	m_tms9928a->int_callback().set(*this, FUNC(nabupc_state::vdp_int_w));
+	NABU_VIDEO_PORT(config, m_video_card, bus::nabu::video_card_devices, "tms9918a");
+	m_video_card->int_callback().set(*this, FUNC(nabupc_state::vdp_int_w));
 
 	// Sound hardware
 	SPEAKER(config, m_speaker).front_center();
@@ -443,7 +439,7 @@ void nabupc_state::io_map(address_map &map)
 	map(0x40, 0x41).w(m_ay8910, FUNC(ay8910_device::data_address_w));
 	map(0x80, 0x80).rw(m_hccauart, FUNC(ay31015_device::receive), FUNC(ay31015_device::transmit));
 	map(0x90, 0x91).rw(m_kbduart, FUNC(i8251_device::read), FUNC(i8251_device::write));
-	map(0xa0, 0xa1).rw(m_tms9928a, FUNC(tms9928a_device::read), FUNC(tms9928a_device::write));
+	map(0xa0, 0xa1).rw(m_video_card, FUNC(bus::nabu::video_port_device::io_read), FUNC(bus::nabu::video_port_device::io_write));
 	map(0xb0, 0xb0).w("prndata", FUNC(output_latch_device::write));
 	map(0xc0, 0xcf).rw(m_bus, FUNC(bus::nabu::option_bus_device::read<0>), FUNC(bus::nabu::option_bus_device::write<0>));
 	map(0xd0, 0xdf).rw(m_bus, FUNC(bus::nabu::option_bus_device::read<1>), FUNC(bus::nabu::option_bus_device::write<1>));
