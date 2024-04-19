@@ -524,10 +524,11 @@ std::error_condition network_adapter_local::load_segment(uint32_t segment_id)
 static INPUT_PORTS_START( nabu_network_adapter_remote )
 	PORT_INCLUDE( nabu_network_adapter_base )
 	PORT_MODIFY("CONFIG")
-	PORT_CONFNAME(0x06, 0x02, "Network Cycle")
+	PORT_CONFNAME(0x0E, 0x02, "Network Cycle")
 	PORT_CONFSETTING(0x02, "Cycle 1")
 	PORT_CONFSETTING(0x04, "Cycle 2")
 	PORT_CONFSETTING(0x06, "Cycle 3")
+	PORT_CONFSETTING(0x08, "Cycle 4")
 INPUT_PORTS_END
 
 network_adapter_remote::network_adapter_remote(machine_config const &mconfig, char const *tag, device_t *owner, uint32_t clock)
@@ -558,7 +559,7 @@ void network_adapter_remote::device_reset()
 		load("cloud.nabu.ca");
 	}
 
-	m_cycle = (m_config->read()  >> 1 ) & 3;
+	m_cycle = (m_config->read()  >> 1 ) & 7;
 }
 
 ioport_constructor network_adapter_remote::device_input_ports() const
@@ -585,8 +586,10 @@ std::error_condition network_adapter_remote::load_segment(uint32_t segment_id)
 		url = util::string_format("/cycle%%201%%20raw/%s", segment_filename);
 	} else if (m_cycle == 2) {
 		url = util::string_format("/cycle%%202%%20raw/%s", segment_filename);
-	} else {
+	} else if (m_cycle == 3) {
 		url = util::string_format("/cycle%%203%%20raw/%s", segment_filename);
+	} else {
+		url = util::string_format("/cycle%%204%%20raw/%s", segment_filename);
 	}
 
 	resp = m_httpclient->request("GET", url);
