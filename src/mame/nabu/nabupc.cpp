@@ -462,6 +462,8 @@ ROM_START( nabupc )
 	ROMX_LOAD( "nabupc-u53-90037150-ver29-2764.bin", 0x0000, 0x2000, CRC(3c484e3d) SHA1(dd10ad6e0a59c54561335272d3c808b0543ba0ef), ROM_BIOS(4) )
 	ROM_SYSTEM_BIOS( 5, "opennabu", "OpenNabu IPL v0.6.5" )
 	ROMX_LOAD( "opennabu.bin", 0x0000, 0x1000, CRC(d1c5e616) SHA1(f760a4f3899aab026eca2c357e836574ab442325), ROM_BIOS(5) )
+	ROM_SYSTEM_BIOS( 6, "ver14p", "4k Patched BIOS - Floppy support (V14)" )
+	ROMX_LOAD( "nabupc-u53-ver14p-2732.bin", 0x0000, 0x1000, CRC(4935218f) SHA1(18bded296a53719e808375510c9aedcdfb370d5c), ROM_BIOS(6) )
 ROM_END
 
 /***************************************************************************
