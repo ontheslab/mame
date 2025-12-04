@@ -742,6 +742,7 @@ project "7z"
 		buildoptions_c {
 			"-Wno-strict-prototypes",
 			"-Wno-undef",
+			"-Wno-dangling-pointer",
 		}
 if _OPTIONS["gcc"]~=nil and string.find(_OPTIONS["gcc"], "clang") and str_to_version(_OPTIONS["gcc_version"]) >= 100000 then
 		buildoptions_c {
